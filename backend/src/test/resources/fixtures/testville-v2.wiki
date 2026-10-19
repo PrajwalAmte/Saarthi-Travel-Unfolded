@@ -1,0 +1,95 @@
+{{pagebanner}}
+'''Testville''' is a fictional city used only in automated tests. It has a palace, a lake and a busy market, and this sentence exists to make the lead long enough.
+
+==Districts==
+{{Regionlist
+| region1name=[[Testville/Old Town|Old Town]]
+| region1items=Fort Area, Market Street
+| region1description=The historic centre with narrow lanes.
+| region2name=[[Testville/Lakeside|Lakeside]]
+| region2items=Boat Club, Sunset Point
+| region2description=
+}}
+
+==Understand==
+===Climate===
+Testville is warm from March to May and wet from June to September, with mild winters that most visitors find pleasant for walking.
+
+==Get in==
+===By train===
+Testville Junction has daily trains to the state capital. The journey takes about three hours and tickets sell out at weekends.
+
+==Get around==
+Auto-rickshaws are everywhere and usually refuse the meter, so agree a fare before you start any journey.
+
+===By bus===
+City buses leave from the central bus stand every few minutes and cover most of the sights described below.
+
+==See==
+* {{see
+| name=Testville Palace | alt=Raja Mahal | url=https://example.org/palace | email=
+| address=Palace Road | lat=12.30 | long=76.65 | directions=
+| phone=+91 821 000 0000 | tollfree=
+| hours=daily 10AM-5:30PM | price=₹100 for adults
+| wikidata=Q999999001
+| lastedit=2024-10-28
+| content=A grand palace with a famous durbar hall. Wheelchair access is available at the main gate.
+}}
+* {{see
+* {{see
+| name=Nameless stub
+}}
+
+==Eat==
+Testville is known for the '''Testville Pak''', a sweet made from gram flour and ghee.
+
+* '''Bisi Test Bath''' - Rice and lentils cooked with local spices, served hot in most restaurants.
+* '''Kafe Example''' - Opposite the bus stand, a small restaurant with good coffee.
+
+===Budget===
+* {{eat
+| name=Hotel Example | address=Gandhi Square | price=₹45
+| lastedit=2026-09-01
+| content=Very good dosa, a local favourite. Try the Testville Pak after your meal.
+}}
+* {{eat
+| name=Hotel Example | address=Station Road
+| content=A second branch with the same menu and a popular queue at breakfast.
+}}
+
+===Mid-range===
+* {{eat
+| name=Lake View Restaurant | price=₹300-600 | hours=noon-11PM
+| lastedit=2023-01-10
+| content=Multi-cuisine with a view of the lake.
+}}
+
+==Drink==
+* {{drink
+| name=Hop Pub | price=₹400 | content=A craft beer pub with live music on weekends.
+}}
+
+==Sleep==
+Budget hotels cluster near the bus stand; quieter stays are by the lake.
+
+===Budget===
+* {{sleep
+| name=Backpacker Inn | price=Dorms ₹400, doubles ₹1200 | checkin=noon | checkout=11AM
+| lastedit=2025-02-01
+| content=Clean dorms and private rooms close to the station.
+}}
+
+===Splurge===
+* {{sleep
+| name=Palace Heritage Hotel | price=₹9000 | url=palacehotel.example.com
+| content=A heritage hotel in a former royal guest house.
+}}
+
+==Stay safe==
+Testville is generally safe, but watch your belongings in the crowded market area during festival weeks.
+
+==Respect==
+Remove your shoes before entering temples and ask before photographing people at prayer.
+
+{{IsPartOf|Test State}}
+{{usablecity}}

@@ -1,0 +1,177 @@
+spring:
+  application:
+    name: saarthi-travel-unfolded
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5433/destination_intel}
+    username: ${DATABASE_USERNAME:idi}
+    password: ${DATABASE_PASSWORD:idi_local_dev}
+    hikari:
+      maximum-pool-size: ${DATABASE_POOL_SIZE:10}
+      minimum-idle: 2
+      connection-timeout: 10000
+      validation-timeout: 3000
+      max-lifetime: 1800000
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  session:
+    timeout: 30d
+    jdbc:
+      initialize-schema: never
+      cleanup-cron: "0 */30 * * * *"
+  mail:
+    host: ${SMTP_HOST:}
+    port: ${SMTP_PORT:1025}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${SMTP_AUTH:false}
+      mail.smtp.starttls.enable: ${SMTP_STARTTLS:false}
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 5000
+      mail.smtp.writetimeout: 5000
+  jackson:
+    deserialization:
+      # Jackson 3 rejects absent primitive fields by default; optional booleans in request
+      # bodies (e.g. conflictOfInterest) default to false instead.
+      fail-on-null-for-primitives: false
+  cache:
+    cache-names: guide-base,destination-detail
+    caffeine:
+      spec: maximumSize=500,expireAfterWrite=15m
+
+server:
+  port: ${PORT:8080}
+  shutdown: graceful
+  forward-headers-strategy: none
+  error:
+    include-stacktrace: never
+    include-message: never
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        same-site: lax
+        secure: ${COOKIE_SECURE:false}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+  health:
+    mail:
+      enabled: false
+
+springdoc:
+  # Public API documentation; set API_DOCS_ENABLED=false in production unless it is meant to be public.
+  api-docs:
+    path: /v3/api-docs
+    enabled: ${API_DOCS_ENABLED:true}
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: ${API_DOCS_ENABLED:true}
+  packages-to-scan: io.destinationintel
+
+logging:
+  level:
+    root: INFO
+    io.destinationintel: INFO
+  pattern:
+    correlation: "[%X{requestId:-}] "
+
+app:
+  public-url: ${APP_PUBLIC_URL:http://localhost:3000}
+  admin-emails: ${APP_ADMIN_EMAILS:}
+  contributor-licence: CC-BY-SA-4.0
+  security:
+    # Only enable when the backend is reachable exclusively through a trusted reverse proxy
+    # (the Next.js frontend or a load balancer) that appends X-Forwarded-For.
+    trust-forwarded-headers: ${TRUST_FORWARDED_HEADERS:false}
+  mail:
+    from: ${MAIL_FROM:Saarthi Travel Unfolded <no-reply@localhost>}
+  oauth:
+    google:
+      client-id: ${GOOGLE_CLIENT_ID:}
+      client-secret: ${GOOGLE_CLIENT_SECRET:}
+    github:
+      client-id: ${GITHUB_CLIENT_ID:}
+      client-secret: ${GITHUB_CLIENT_SECRET:}
+  ingestion:
+    enabled: ${INGESTION_ENABLED:true}
+    bootstrap-on-startup: ${INGESTION_BOOTSTRAP:true}
+    # Wikidata QIDs of the launch destinations whose guides are ingested at bootstrap
+    # (Q10086 = Mysuru, Q1355 = Bengaluru). Further guides are added on request or by admins.
+    seed-guides: ${INGESTION_SEED_GUIDES:Q10086,Q1355}
+    # Number of additional Wikivoyage destinations to ingest per day, largest first. 0 disables.
+    expansion-per-day: ${INGESTION_EXPANSION_PER_DAY:0}
+    contact: ${INGESTION_CONTACT:}
+    http-timeout: 30s
+    request-pause: 1s
+    poll-interval: 5s
+    max-district-articles: 12
+    min-population-for-index: 100000
+    climate-years: 10
+    wikidata-sparql-url: https://query.wikidata.org/sparql
+    wikidata-api-url: https://www.wikidata.org/w/api.php
+    wikivoyage-api-url: https://en.wikivoyage.org/w/api.php
+    commons-api-url: https://commons.wikimedia.org/w/api.php
+    open-meteo-archive-url: https://archive-api.open-meteo.com/v1/archive
+    # OpenStreetMap: release-based import of the Geofabrik India extract (ODbL).
+    osm-extract-url: ${OSM_EXTRACT_URL:https://download.geofabrik.de/asia/india-latest.osm.pbf}
+    osm-state-url: ${OSM_STATE_URL:https://download.geofabrik.de/asia/india-updates/state.txt}
+    work-dir: ${INGESTION_WORK_DIR:${java.io.tmpdir}/saarthi-ingestion}
+    keep-downloads: ${INGESTION_KEEP_DOWNLOADS:false}
+    poi-destination-radius-km: 20
+    # Overture Maps Places (CDLA Permissive 2.0), queried by bounding box around guide destinations.
+    overture-stac-url: https://stac.overturemaps.org/catalog.json
+    overture-release: ${OVERTURE_RELEASE:}
+    overture-radius-km: ${OVERTURE_RADIUS_KM:12}
+    overture-min-confidence: 0.6
+  freshness:
+    stable-days: 1095
+    semi-stable-days: 365
+    volatile-days: 120
+  ranking:
+    weights:
+      preference: 3.0
+      evidence: 1.5
+      recency: 1.5
+      community: 2.0
+      geography: 1.0
+      diversity-penalty: 0.75
+    diversity-window: 3
+    nearby-radius-km: 25
+    major-attraction-min-sitelinks: 15
+  coverage:
+    core-sections: eat,stay,explore,getting_around
+    min-entries-per-core-section: 3
+    min-core-sections-for-usable: 3
+    well-covered-entries-per-section: 8
+    well-covered-verified-share: 0.3
+    min-fresh-share: 0.25
+    # Community handoff: once this share of a destination's core items has an accepted community
+    # verification within its review window, collected sources stop being consumed for it.
+    graduation-verified-share: 0.6
+  trust:
+    promote-min-accepted: 10
+    promote-max-rejection-ratio: 0.1
+    promote-min-account-age-days: 14
+    demote-window-days: 90
+    demote-min-rejected: 3
+    demote-rejection-ratio: 0.25
+  rate-limits:
+    search-per-minute: 120
+    requests-per-hour: 10
+    sign-in-per-hour: 5
+    contributions-per-hour: 30
+    verifications-per-hour: 60
+    flags-per-hour: 20

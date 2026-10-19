@@ -1,0 +1,89 @@
+# Saarthi — Travel Unfolded: local development and single-host deployment.
+#
+#   docker compose up --build          # everything (db, mail catcher, API, web)
+#   docker compose up -d db mailpit    # only the infrastructure, run API/web from source
+#
+# All settings come from .env (copy .env.example). No paid services are required.
+name: saarthi-travel-unfolded
+
+services:
+  db:
+    image: ${POSTGIS_IMAGE:-postgis/postgis:17-3.5}
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-destination_intel}
+      POSTGRES_USER: ${POSTGRES_USER:-idi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-idi_local_dev}
+    ports:
+      - "${DB_PORT:-5433}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-idi} -d ${POSTGRES_DB:-destination_intel}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Development SMTP server: captures sign-in emails; read them at http://localhost:8025.
+  # In production, point SMTP_HOST at a real mail provider and remove this service.
+  mailpit:
+    image: axllent/mailpit:v1.27
+    ports:
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+
+  api:
+    build: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-destination_intel}
+      DATABASE_USERNAME: ${POSTGRES_USER:-idi}
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-idi_local_dev}
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:3000}
+      APP_ADMIN_EMAILS: ${APP_ADMIN_EMAILS:-}
+      TRUST_FORWARDED_HEADERS: "true"
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_AUTH: ${SMTP_AUTH:-false}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-false}
+      MAIL_FROM: ${MAIL_FROM:-Saarthi Travel Unfolded <no-reply@localhost>}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      INGESTION_ENABLED: ${INGESTION_ENABLED:-true}
+      INGESTION_BOOTSTRAP: ${INGESTION_BOOTSTRAP:-true}
+      INGESTION_SEED_GUIDES: ${INGESTION_SEED_GUIDES:-Q10086,Q1355}
+      INGESTION_EXPANSION_PER_DAY: ${INGESTION_EXPANSION_PER_DAY:-0}
+      INGESTION_CONTACT: ${INGESTION_CONTACT:-}
+    # The API is reached through the web container's reverse proxy; it is not published on
+    # the host by default. Uncomment to call it directly (e.g. for Swagger UI).
+    # ports:
+    #   - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health/readiness | grep -q UP"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  web:
+    build:
+      context: ./frontend
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      BACKEND_INTERNAL_URL: http://api:8080
+      NEXT_PUBLIC_SITE_URL: ${APP_PUBLIC_URL:-http://localhost:3000}
+      # Set to true only when a load balancer that appends the client address sits in front of web.
+      TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-false}
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+
+volumes:
+  db-data:

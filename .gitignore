@@ -1,0 +1,32 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Java / Maven
+backend/target/
+*.class
+*.log
+
+# Node / Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/coverage/
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+frontend/next-env.d.ts
+*.tsbuildinfo
+
+# Editors and OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+
+# Internal documentation (architecture notes, ops runbooks — not for public repo)
+docs/
+
+# Database dumps for deployment (large, not source)
+deploy/

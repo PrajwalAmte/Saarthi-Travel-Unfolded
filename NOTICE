@@ -1,0 +1,17 @@
+Saarthi — Travel Unfolded
+Copyright 2026 Saarthi Travel Unfolded contributors
+
+The SOFTWARE in this repository is licensed under the Apache License, Version 2.0
+(see LICENSE).
+
+The DATA that a running instance ingests or collects is NOT covered by the software
+licence. It keeps the licence of its source; see DATA_LICENSES.md:
+
+  - Wikidata structured data: CC0 1.0
+  - English Wikivoyage text and listings: CC BY-SA 4.0 (share-alike)
+  - Open-Meteo historical weather data (ERA5): CC BY 4.0
+  - Wikimedia Commons images: the licence stated for each file
+  - Community contributions: CC BY-SA 4.0, accepted by each contributor
+
+This repository contains no ingested data. Test fixtures under
+backend/src/test/resources/fixtures are synthetic and written for the tests.

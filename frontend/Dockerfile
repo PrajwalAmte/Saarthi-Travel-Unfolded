@@ -8,7 +8,10 @@ FROM node:22-alpine AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-ENV NEXT_TELEMETRY_DISABLED=1
+# NEXT_PUBLIC_* values are fixed when the app is built. Render passes a service's environment
+# variables to Docker builds as build arguments, so this must be set before the first deploy.
+ARG NEXT_PUBLIC_SITE_URL
+ENV NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL}
 RUN npm run build
 
 FROM node:22-alpine AS run

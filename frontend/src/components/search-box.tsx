@@ -56,7 +56,7 @@ export function SearchBox({ suffix = "", initialQuery = "", autoFocus, size = "l
       try {
         const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&limit=8`, { signal: controller.signal });
         if (!res.ok) {
-          throw new Error(res.status === 429 ? "Too many searches. Wait a moment." : "Search is unavailable right now.");
+          throw new Error(res.status === 429 ? "Too many searches. Wait a moment." : "The guide service is waking up. Try again in a minute.");
         }
         const data = (await res.json()) as SearchResult;
         setResults(data.results);

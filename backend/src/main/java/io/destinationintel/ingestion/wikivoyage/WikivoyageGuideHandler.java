@@ -47,6 +47,13 @@ import tools.jackson.databind.JsonNode;
 @Component
 public class WikivoyageGuideHandler implements JobHandler {
 
+    /**
+     * Priority of the photo and climate jobs a guide queues. Above the guide imports (20 when queued in bulk),
+     * so a destination's photo and weather arrive right after its guide, not after every guide in the queue.
+     */
+    static final int FOLLOW_UP_PRIORITY = 30;
+
+
     private final WikivoyageClient client;
     private final WikidataClient wikidata;
     private final PlaceRepository places;
@@ -189,8 +196,8 @@ public class WikivoyageGuideHandler implements JobHandler {
             stats.put("run", run.summary());
 
             // Make sure supporting data exists for a destination that now has guide content.
-            jobs.enqueue("climate", "open-meteo", place.id(), Map.of(), "climate:" + place.id(), 1, "system");
-            jobs.enqueue("place_image", "wikimedia-commons", place.id(), Map.of(), "place_image:" + place.id(), 0, "system");
+            jobs.enqueue("climate", "open-meteo", place.id(), Map.of(), "climate:" + place.id(), FOLLOW_UP_PRIORITY - 1, "system");
+            jobs.enqueue("place_image", "wikimedia-commons", place.id(), Map.of(), "place_image:" + place.id(), FOLLOW_UP_PRIORITY, "system");
             return stats;
         } catch (RuntimeException e) {
             recorder.fail(run, e.getMessage());

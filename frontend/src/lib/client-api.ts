@@ -85,7 +85,7 @@ async function request<T>(path: string, init: { method?: string; body?: unknown 
     const problem = (data as ApiProblem | null) ?? { status: res.status };
     if (res.status === 401 && !problem.detail) problem.detail = "Please sign in to continue.";
     if (res.status === 403 && !problem.detail) problem.detail = "You do not have permission to do that.";
-    if (res.status >= 500 && !problem.detail) problem.detail = "The service is having trouble right now. Please try again shortly.";
+    if (res.status >= 500 && !problem.detail) problem.detail = "The guide service is waking up. Try again in a minute.";
     throw new ClientApiError(res.status, { ...problem, status: res.status });
   }
   return data as T;

@@ -71,7 +71,7 @@ describe("SearchBox", () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 503 }));
     render(<SearchBox />);
     await userEvent.type(screen.getByRole("combobox"), "test");
-    expect(await screen.findByText("Search is unavailable right now.")).toBeInTheDocument();
+    expect(await screen.findByText("The guide service is waking up. Try again in a minute.")).toBeInTheDocument();
   });
 
   it("does not search for a single character", async () => {

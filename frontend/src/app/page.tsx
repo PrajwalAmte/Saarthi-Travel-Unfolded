@@ -1,7 +1,7 @@
 import { ArrowRight, BadgeCheck, FileText, HeartHandshake } from "lucide-react";
 import Link from "next/link";
 import { HomeSearch } from "@/components/home-search";
-import { Notice } from "@/components/ui/notice";
+import { ServiceWaking } from "@/components/service-waking";
 import { apiGet } from "@/lib/server-api";
 import type { Meta, Page } from "@/lib/types";
 import { safeHref } from "@/lib/utils";
@@ -21,7 +21,7 @@ type Guide = {
 
 async function load<T>(path: string): Promise<T | null> {
   try {
-    return await apiGet<T>(path, { timeoutMs: 5000 });
+    return await apiGet<T>(path, { timeoutMs: 8000 });
   } catch {
     return null;
   }
@@ -49,9 +49,7 @@ export default async function HomePage() {
             <HomeSearch />
           </div>
           {meta === null ? (
-            <Notice tone="warning" className="mt-6 max-w-3xl" title="Search is unavailable right now">
-              Please try again in a moment.
-            </Notice>
+            <ServiceWaking className="mt-6 max-w-3xl" />
           ) : indexed > 0 ? (
             <p className="mt-6 text-sm text-muted">
               {indexed >= 1000 ? `${(Math.floor(indexed / 100) * 100).toLocaleString("en-IN")}+` : indexed.toLocaleString("en-IN")}{" "}
@@ -83,7 +81,12 @@ export default async function HomePage() {
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={g.imageUrl} alt="" loading="lazy" className="aspect-[16/9] w-full object-cover" />
                   ) : (
-                    <div className="aspect-[16/9] w-full bg-sunken" aria-hidden />
+                    <div
+                      className="flex aspect-[16/9] w-full items-center justify-center bg-gradient-to-br from-accent-soft to-sunken"
+                      aria-hidden
+                    >
+                      <span className="font-serif text-6xl font-semibold text-accent/60">{g.name.charAt(0)}</span>
+                    </div>
                   )}
                   <div className="p-4">
                     <h3 className="font-serif text-xl font-semibold group-hover:underline">{g.name}</h3>

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CoverageBadge } from "@/components/coverage-badge";
 import { RequestForm } from "@/components/request-form";
 import { SearchBox } from "@/components/search-box";
+import { ServiceWaking } from "@/components/service-waking";
 import { Notice } from "@/components/ui/notice";
 import { preferencesToParams, parsePreferences } from "@/lib/preferences";
 import { apiGet } from "@/lib/server-api";
@@ -44,9 +45,7 @@ export default async function SearchPage({ searchParams }: Props) {
         <SearchBox size="md" initialQuery={q} suffix={prefs} />
       </div>
       {failed ? (
-        <Notice tone="error" className="mt-6 max-w-2xl" title="Search is unavailable">
-          The guide service could not be reached. Please try again in a moment.
-        </Notice>
+        <ServiceWaking className="mt-6 max-w-2xl" />
       ) : null}
 
       {result ? (

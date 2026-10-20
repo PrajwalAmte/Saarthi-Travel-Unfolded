@@ -68,7 +68,7 @@ export async function proxy(req: NextRequest, path: string): Promise<Response> {
     });
   } catch {
     return Response.json(
-      { status: 502, code: "upstream_unavailable", detail: "The API is not reachable right now. Please try again shortly." },
+      { status: 502, code: "upstream_unavailable", detail: "The guide service is waking up. Try again in a minute." },
       { status: 502 },
     );
   } finally {

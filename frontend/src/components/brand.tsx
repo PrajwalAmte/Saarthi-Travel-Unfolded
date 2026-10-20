@@ -1,19 +1,14 @@
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
-/** The mark: a winding road leading to a destination (a saarthi is a guide on the way). */
+/** The mark: a sun over mountains, with a winding road leading up into them (a saarthi is a guide on the way). */
 export function BrandMark({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 32 32" aria-hidden className={cn("size-9 shrink-0 text-accent", className)}>
       <rect width="32" height="32" rx="9" fill="currentColor" />
-      <path
-        d="M9.5 25.5c0-4.5 13-3.6 13-8.6 0-4.3-8-3.2-8-7.4"
-        fill="none"
-        stroke="var(--color-accent-ink)"
-        strokeWidth="2.6"
-        strokeLinecap="round"
-      />
-      <circle cx="14.5" cy="7.2" r="2.6" fill="var(--color-accent-ink)" />
+      <circle cx="24" cy="8.5" r="2.4" fill="var(--color-accent-ink)" opacity="0.85" />
+      <path d="M3 26 L12 10.5 L17.3 19.2 L20.8 14.2 L29 26 Z" fill="var(--color-accent-ink)" />
+      <path d="M11.2 26 C13.6 22.6 19.8 22.4 17.4 19.1 C16.4 17.7 17.6 16.6 16.9 15.2 L17.9 15.2 C18.7 16.7 17.6 18 18.7 19.4 C21.6 22.9 16.6 23.4 20.6 26 Z" fill="currentColor" />
     </svg>
   );
 }

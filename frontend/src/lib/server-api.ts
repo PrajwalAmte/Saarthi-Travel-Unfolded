@@ -15,13 +15,12 @@ export class ApiError extends Error {
   }
 }
 
-/**
- * Server-side GET against the API. Guides are always read fresh: the API caches safe public
- * responses itself and invalidates them after accepted changes.
- */
-export async function apiGet<T>(path: string, init?: { timeoutMs?: number }): Promise<T> {
+/** Statuses that mean "the service is busy or starting", not "this request is wrong". */
+const TRANSIENT = new Set([502, 503, 504]);
+
+async function fetchOnce<T>(path: string, timeoutMs: number): Promise<T> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), init?.timeoutMs ?? 10_000);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(`${backendUrl()}${path}`, {
       cache: "no-store",
@@ -40,6 +39,24 @@ export async function apiGet<T>(path: string, init?: { timeoutMs?: number }): Pr
     return (await res.json()) as T;
   } finally {
     clearTimeout(timer);
+  }
+}
+
+/**
+ * Server-side GET against the API. Guides are always read fresh: the API caches safe public
+ * responses itself and invalidates them after accepted changes. A slow first load (the service
+ * waking up, or busy) gets a generous timeout and one retry on a timeout, a network error or a
+ * 502/503/504, so a single slow call no longer turns into an error page. Real errors (404, 400…)
+ * are not retried.
+ */
+export async function apiGet<T>(path: string, init?: { timeoutMs?: number }): Promise<T> {
+  const timeoutMs = init?.timeoutMs ?? 25_000;
+  try {
+    return await fetchOnce<T>(path, timeoutMs);
+  } catch (e) {
+    const transient = e instanceof ApiError ? TRANSIENT.has(e.status) : true;
+    if (!transient) throw e;
+    return fetchOnce<T>(path, timeoutMs);
   }
 }
 

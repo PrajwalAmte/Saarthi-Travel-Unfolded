@@ -3,6 +3,7 @@ import { Fraunces, Source_Sans_3 } from "next/font/google";
 import { SessionProvider } from "@/components/session-provider";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { siteUrl } from "@/lib/site-url";
 import { THEME_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
@@ -10,7 +11,7 @@ const display = Fraunces({ subsets: ["latin"], variable: "--font-display", displ
 const body = Source_Sans_3({ subsets: ["latin"], variable: "--font-body", display: "swap" });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
+  metadataBase: siteUrl(),
   title: { default: "Saarthi — Travel Unfolded", template: "%s · Saarthi" },
   description:
     "Plan your trip anywhere in India: where to eat, where to stay, what to see, what things cost and how to get around.",

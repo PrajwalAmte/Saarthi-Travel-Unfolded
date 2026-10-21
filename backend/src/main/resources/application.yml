@@ -92,6 +92,9 @@ app:
   public-url: ${APP_PUBLIC_URL:http://localhost:3000}
   admin-emails: ${APP_ADMIN_EMAILS:}
   contributor-licence: CC-BY-SA-4.0
+  notifications:
+    # "Your guide is ready" emails. Turn off on any machine that shares the production database but is not the live site.
+    enabled: ${REQUEST_NOTIFICATIONS_ENABLED:true}
   security:
     # Only enable when the backend is reachable exclusively through a trusted reverse proxy
     # (the Next.js frontend or a load balancer) that appends X-Forwarded-For.

@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CoverageBadge } from "@/components/coverage-badge";
+import { AutoRefresh } from "@/components/auto-refresh";
 import { ChooseCandidate } from "@/components/choose-candidate";
+import { NotifyMe } from "@/components/notify-me";
 import { Notice } from "@/components/ui/notice";
 import { apiGetOrNull } from "@/lib/server-api";
 import type { RequestView } from "@/lib/types";
@@ -29,8 +31,18 @@ function stepIndex(r: RequestView): number {
   }
 }
 
-export default async function RequestStatusPage({ params }: { params: Promise<{ code: string }> }) {
+const WAITING: RequestView["status"][] = ["received", "queued", "processing"];
+const CAN_NOTIFY: RequestView["status"][] = ["received", "queued", "processing", "building", "indexed_no_guide", "needs_review"];
+
+export default async function RequestStatusPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ code: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { code } = await params;
+  const emailed = (await searchParams).emailed === "1";
   if (!/^[a-z0-9]{6,16}$/.test(code)) notFound();
   const r = await apiGetOrNull<RequestView>(`/api/requests/${code}`);
   if (!r) notFound();
@@ -46,6 +58,20 @@ export default async function RequestStatusPage({ params }: { params: Promise<{ 
         {r.statusDetail}
       </Notice>
 
+      {r.estimate ? (
+        <section aria-label="Expected wait" className="mt-6 rounded-lg border border-line bg-surface p-4">
+          {r.estimate.importerRunning ? (
+            <>
+              <p className="text-sm text-muted">Expected wait</p>
+              <p className="mt-1 text-xl font-semibold">{r.estimate.summary}</p>
+            </>
+          ) : (
+            <p className="font-medium">{r.estimate.summary}</p>
+          )}
+          <p className="mt-2 text-sm text-muted">{r.estimate.basis}</p>
+        </section>
+      ) : null}
+
       <ol className="mt-6 grid gap-2 sm:grid-cols-4" aria-label="Progress">
         {STEPS.map((s, i) => (
           <li
@@ -59,6 +85,12 @@ export default async function RequestStatusPage({ params }: { params: Promise<{ 
       </ol>
 
       {r.status === "needs_review" && r.candidates.length ? <ChooseCandidate code={r.trackingCode} candidates={r.candidates} /> : null}
+
+      {r.emailUpdates && CAN_NOTIFY.includes(r.status) ? (
+        <NotifyMe code={r.trackingCode} alreadySubscribed={emailed} noGuideYet={r.status === "indexed_no_guide"} />
+      ) : null}
+
+      <AutoRefresh active={WAITING.includes(r.status) || r.status === "building"} />
 
       {r.destination ? (
         <div className="mt-6 flex flex-wrap items-center gap-3 rounded-lg border border-line bg-surface p-4">

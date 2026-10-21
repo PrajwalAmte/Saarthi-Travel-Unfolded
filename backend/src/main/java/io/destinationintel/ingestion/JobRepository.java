@@ -80,6 +80,13 @@ public class JobRepository {
                 .param("dedup", dedupKey).query(UUID.class).single();
     }
 
+    /** Records that the importer is alive; read by the request status page to say whether work is progressing. */
+    public void touchImporter() {
+        jdbc.sql("""
+                        INSERT INTO importer_heartbeat (id, seen_at) VALUES (1, now())
+                        ON CONFLICT (id) DO UPDATE SET seen_at = EXCLUDED.seen_at""").update();
+    }
+
     /** Atomically claims the next due job, or returns empty. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Optional<JobRow> claimNext() {

@@ -22,7 +22,10 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Destination requests", description = "Request a missing destination and track it, without an account")
 public class RequestController {
 
-    public record SubmitBody(@NotBlank @Size(min = 2, max = 120) String query, @Size(max = 60) String state) {}
+    public record SubmitBody(@NotBlank @Size(min = 2, max = 120) String query, @Size(max = 60) String state,
+                             @Size(max = 254) String email) {}
+
+    public record NotifyBody(@NotBlank @Size(max = 254) String email) {}
 
     public record ChooseBody(@NotBlank @Pattern(regexp = "^Q[0-9]+$") String wikidataId) {}
 
@@ -37,13 +40,20 @@ public class RequestController {
     @PostMapping
     @Operation(summary = "Request a destination; duplicates are merged and counted as demand")
     public ResponseEntity<RequestService.RequestView> submit(@Valid @RequestBody SubmitBody body, HttpServletRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(requests.submit(body.query(), body.state(), ip.resolve(request)));
+        return ResponseEntity.status(HttpStatus.CREATED).body(requests.submit(body.query(), body.state(), body.email(), ip.resolve(request)));
     }
 
     @GetMapping("/{code}")
     @Operation(summary = "Status of a destination request by its tracking code")
     public RequestService.RequestView status(@PathVariable String code) {
         return requests.view(code);
+    }
+
+    @PostMapping("/{code}/notify")
+    @Operation(summary = "Email me once when this request's guide is ready (opt-in; the address is erased after sending)")
+    public ResponseEntity<RequestService.RequestView> notifyMe(@PathVariable String code, @Valid @RequestBody NotifyBody body,
+                                                               HttpServletRequest request) {
+        return ResponseEntity.accepted().body(requests.notifyMe(code, body.email(), ip.resolve(request)));
     }
 
     @PostMapping("/{code}/choose")

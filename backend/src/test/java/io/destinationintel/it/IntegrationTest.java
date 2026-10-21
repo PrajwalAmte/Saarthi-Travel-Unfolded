@@ -95,7 +95,7 @@ public abstract class IntegrationTest {
         jdbc.sql("""
                 TRUNCATE place, app_user, ingestion_job, destination_request, audit_log, login_token,
                          spring_session, source_sync_run, quality_report, poi_match_review, poi_source_record, poi,
-                         place_source_identity CASCADE
+                         place_source_identity, importer_heartbeat CASCADE
                 """).update();
         jdbc.sql("""
                 UPDATE source SET enabled = true, last_success_at = NULL, last_error = NULL, last_error_at = NULL,

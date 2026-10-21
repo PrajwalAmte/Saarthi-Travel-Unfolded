@@ -57,6 +57,8 @@ public class RequestService {
             DestinationRef destination,
             List<Candidate> candidates,
             String jobStatus,
+            GuideEstimator.Estimate estimate,
+            boolean emailUpdates,
             OffsetDateTime firstRequestedAt,
             OffsetDateTime lastRequestedAt) {}
 
@@ -65,6 +67,9 @@ public class RequestService {
     private static final String COLUMNS = """
             id, tracking_code, query_text, normalized_query, state_hint, resolved_place_id, status, status_detail,
             merged_into_id, demand_count, candidates::text AS candidates, last_job_id, first_requested_at, last_requested_at""";
+    /** Reader requests jump ahead of bulk imports (20) but not behind-the-scenes follow-ups such as photos (29-30). */
+    static final int RESOLVE_PRIORITY = 26;
+    static final int GUIDE_PRIORITY = 25;
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final String ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789";
 
@@ -75,9 +80,12 @@ public class RequestService {
     private final AuditService audit;
     private final Json json;
     private final AppProperties props;
+    private final GuideEstimator estimator;
+    private final RequestNotifications notifications;
 
     public RequestService(JdbcClient jdbc, PlaceRepository places, JobRepository jobs, RateLimiter rateLimiter,
-                          AuditService audit, Json json, AppProperties props) {
+                          AuditService audit, Json json, AppProperties props, GuideEstimator estimator,
+                          RequestNotifications notifications) {
         this.jdbc = jdbc;
         this.places = places;
         this.jobs = jobs;
@@ -85,11 +93,35 @@ public class RequestService {
         this.audit = audit;
         this.json = json;
         this.props = props;
+        this.estimator = estimator;
+        this.notifications = notifications;
     }
 
     @Transactional
-    public RequestView submit(String rawQuery, String rawStateHint, String clientIp) {
+    public RequestView submit(String rawQuery, String rawStateHint, String rawEmail, String clientIp) {
         rateLimiter.check("destination-request", clientIp, props.rateLimits().requestsPerHour(), Duration.ofHours(1));
+        String email = RequestNotifications.clean(rawEmail);
+        RequestView created = create(rawQuery, rawStateHint, clientIp);
+        if (email != null) {
+            notifications.subscribe(byCode(created.trackingCode()).id(), email);
+        }
+        return created;
+    }
+
+    /** Adds an email to an existing request; the reader gets one email when the guide is ready. */
+    @Transactional
+    public RequestView notifyMe(String trackingCode, String rawEmail, String clientIp) {
+        rateLimiter.check("destination-request-notify", clientIp, props.rateLimits().requestsPerHour(), Duration.ofHours(1));
+        String email = RequestNotifications.clean(rawEmail);
+        if (email == null) {
+            throw ApiException.badRequest("invalid_email", "Enter your email address.");
+        }
+        RequestRow r = followMerge(byCode(trackingCode));
+        notifications.subscribe(r.id(), email);
+        return view(r.trackingCode());
+    }
+
+    private RequestView create(String rawQuery, String rawStateHint, String clientIp) {
         String query = rawQuery == null ? "" : rawQuery.trim().replaceAll("\\s+", " ");
         if (query.length() < 2 || query.length() > 120 || !query.matches(".*\\p{L}.*")) {
             throw ApiException.badRequest("invalid_query", "Enter the name of a place in India (2 to 120 characters).");
@@ -137,7 +169,7 @@ public class RequestService {
             attachPlace(id, local.get());
         } else {
             UUID job = jobs.enqueue("resolve_request", "wikidata", null, Map.of("requestId", id.toString()),
-                    "resolve_request:" + id, 15, "request");
+                    "resolve_request:" + id, RESOLVE_PRIORITY, "request");
             jdbc.sql("UPDATE destination_request SET status = 'queued', last_job_id = :j, status_detail = :d, updated_at = now() WHERE id = :id")
                     .param("j", job).param("d", "Waiting to look this place up in Wikidata.").param("id", id).update();
         }
@@ -170,7 +202,7 @@ public class RequestService {
             status = coverage.equals("building") ? "building" : "published";
             detail = coverage.equals("building") ? "A guide exists but is still being built." : "A guide is available.";
         } else if (place.wikivoyageTitle() != null) {
-            job = jobs.enqueue("wikivoyage_guide", "wikivoyage-en", place.id(), Map.of(), "wikivoyage_guide:" + place.id(), 10, "request");
+            job = jobs.enqueue("wikivoyage_guide", "wikivoyage-en", place.id(), Map.of(), "wikivoyage_guide:" + place.id(), GUIDE_PRIORITY, "request");
             status = "processing";
             detail = "Ingesting the open Wikivoyage guide for this place. It will be published only if it passes the quality checks.";
         } else {
@@ -218,7 +250,7 @@ public class RequestService {
             throw ApiException.badRequest("invalid_candidate", "Choose one of the listed places.");
         }
         UUID job = jobs.enqueue("resolve_request", "wikidata", null, Map.of("requestId", r.id().toString(), "wikidataId", wikidataId),
-                "resolve_request:" + r.id(), 15, "request");
+                "resolve_request:" + r.id(), RESOLVE_PRIORITY, "request");
         jdbc.sql("""
                         UPDATE destination_request SET status = 'queued', last_job_id = :j,
                                status_detail = 'Looking up the place you chose.', updated_at = now()
@@ -258,9 +290,13 @@ public class RequestService {
                 }
             }
         }
+        GuideEstimator.Estimate estimate = null;
+        if (status.equals("received") || status.equals("queued") || status.equals("processing")) {
+            estimate = estimator.estimate(r.lastJobId(), !status.equals("processing")).orElse(null);
+        }
         return new RequestView(r.trackingCode(), r.queryText(), r.stateHint(), status, label(status), detail,
-                r.demandCount(), dest, status.equals("needs_review") ? candidates(r) : List.of(), jobStatus,
-                r.firstRequestedAt(), r.lastRequestedAt());
+                r.demandCount(), dest, status.equals("needs_review") ? candidates(r) : List.of(), jobStatus, estimate,
+                notifications.available(), r.firstRequestedAt(), r.lastRequestedAt());
     }
 
     public List<RequestRow> list(String status, int limit, int offset) {

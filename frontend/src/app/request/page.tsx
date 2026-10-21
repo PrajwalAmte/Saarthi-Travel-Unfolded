@@ -1,4 +1,8 @@
 import { RequestForm } from "@/components/request-form";
+import { apiGet } from "@/lib/server-api";
+import type { Meta } from "@/lib/types";
+
+export const dynamic = "force-dynamic";
 
 export const metadata = { title: "Request a destination" };
 
@@ -7,6 +11,9 @@ type Props = { searchParams: Promise<Record<string, string | string[] | undefine
 export default async function RequestPage({ searchParams }: Props) {
   const sp = await searchParams;
   const q = (Array.isArray(sp.q) ? sp.q[0] : sp.q) ?? "";
+  const emailAvailable = await apiGet<Meta>("/api/meta", { timeoutMs: 8000 })
+    .then((m) => m.emailSignInAvailable)
+    .catch(() => false);
   return (
     <div className="container-page max-w-2xl py-10">
       <h1 className="text-3xl font-semibold sm:text-4xl">Request a destination</h1>
@@ -16,7 +23,7 @@ export default async function RequestPage({ searchParams }: Props) {
         without a guide until contributors add to it.
       </p>
       <div className="mt-6">
-        <RequestForm initialQuery={q} />
+        <RequestForm initialQuery={q} emailAvailable={emailAvailable} />
       </div>
     </div>
   );

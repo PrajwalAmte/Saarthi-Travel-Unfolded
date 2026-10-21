@@ -267,8 +267,19 @@ export type RequestView = {
   destination: { slug: string; name: string; kind: string; coverageStatus: CoverageStatus } | null;
   candidates: { wikidataId: string; label: string | null; description: string | null }[];
   jobStatus: string | null;
+  estimate: RequestEstimate | null;
+  emailUpdates: boolean;
   firstRequestedAt: string;
   lastRequestedAt: string;
+};
+
+export type RequestEstimate = {
+  minMinutes: number | null;
+  maxMinutes: number | null;
+  summary: string;
+  basis: string;
+  importerRunning: boolean;
+  jobsAhead: number;
 };
 
 export type SessionUser = { id: string; displayName: string; tier: string; admin: boolean; licenceAccepted: boolean };

@@ -38,6 +38,11 @@ public class JobRunner {
         if (!enabled) {
             return;
         }
+        try {
+            jobs.touchImporter();
+        } catch (RuntimeException e) {
+            log.debug("Could not record importer heartbeat: {}", e.toString());
+        }
         for (int i = 0; i < 25; i++) {
             Optional<JobRow> next = jobs.claimNext();
             if (next.isEmpty()) {

@@ -34,6 +34,11 @@ export const correctionSchema = z
     message: "Describe your connection to this place",
   });
 
+const optionalEmail = z.preprocess(
+  (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+  z.string().trim().toLowerCase().email("Enter a valid email address, or leave it blank").max(254).optional(),
+);
+
 export const requestSchema = z.object({
   query: z
     .string()
@@ -42,6 +47,11 @@ export const requestSchema = z.object({
     .max(120, "Keep this under 120 characters")
     .refine((v) => /\p{L}/u.test(v), "Enter a place name"),
   state: optionalText(60),
+  email: optionalEmail,
+});
+
+export const notifySchema = z.object({
+  email: z.string().trim().toLowerCase().min(1, "Enter your email address").email("Enter a valid email address").max(254),
 });
 
 export const emailSignInSchema = z.object({

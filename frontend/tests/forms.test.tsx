@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { StillTrue } from "@/components/guide/still-true";
+import { NotifyMe } from "@/components/notify-me";
 import { RequestForm } from "@/components/request-form";
 import type { SessionView } from "@/lib/types";
 import { axeViolations } from "./a11y";
@@ -51,7 +52,73 @@ describe("RequestForm", () => {
   });
 
   it("is accessible", async () => {
-    const { container } = render(<RequestForm />);
+    const { container } = render(<RequestForm emailAvailable />);
+    expect(await axeViolations(container)).toEqual([]);
+  });
+
+  it("only offers the email field when the server can send email", () => {
+    const { unmount } = render(<RequestForm />);
+    expect(screen.queryByLabelText(/Email me when it is ready/)).not.toBeInTheDocument();
+    unmount();
+    render(<RequestForm emailAvailable />);
+    expect(screen.getByLabelText(/Email me when it is ready/)).toBeInTheDocument();
+  });
+
+  it("sends the optional email and tells the status page not to ask again", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(json({ trackingCode: "abcdefghjk" }, 201));
+    render(<RequestForm initialQuery="Hampi" emailAvailable />);
+    await userEvent.type(screen.getByLabelText(/Email me when it is ready/), "  Reader@Example.com ");
+    await userEvent.click(screen.getByRole("button", { name: "Request this destination" }));
+    await waitFor(() => expect(routerMock.push).toHaveBeenCalledWith("/requests/abcdefghjk?emailed=1"));
+    const [, init] = fetchSpy.mock.calls[0]!;
+    expect(JSON.parse(String((init as RequestInit).body))).toEqual({ query: "Hampi", email: "reader@example.com" });
+  });
+
+  it("rejects an unreadable email before calling the API", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    render(<RequestForm initialQuery="Hampi" emailAvailable />);
+    await userEvent.type(screen.getByLabelText(/Email me when it is ready/), "not-an-email");
+    await userEvent.click(screen.getByRole("button", { name: "Request this destination" }));
+    expect(await screen.findByText(/valid email address/)).toBeInTheDocument();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("NotifyMe", () => {
+  beforeEach(() => {
+    document.cookie = "XSRF-TOKEN=test-token";
+  });
+
+  it("saves the address for this request and confirms", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(json({}, 202));
+    render(<NotifyMe code="abcdefghjk" />);
+    await userEvent.type(screen.getByLabelText(/Email me when it is ready/), "reader@example.com");
+    await userEvent.click(screen.getByRole("button", { name: "Email me" }));
+    expect(await screen.findByText("We will email you")).toBeInTheDocument();
+    const [url, init] = fetchSpy.mock.calls[0]!;
+    expect(url).toBe("/api/requests/abcdefghjk/notify");
+    expect(JSON.parse(String((init as RequestInit).body))).toEqual({ email: "reader@example.com" });
+  });
+
+  it("asks for a real address and shows server errors", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(json({ status: 503, code: "email_unavailable", detail: "Email updates are not available." }, 503));
+    render(<NotifyMe code="abcdefghjk" />);
+    await userEvent.click(screen.getByRole("button", { name: "Email me" }));
+    expect(await screen.findByText("Enter your email address")).toBeInTheDocument();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    await userEvent.type(screen.getByLabelText(/Email me when it is ready/), "reader@example.com");
+    await userEvent.click(screen.getByRole("button", { name: "Email me" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Email updates are not available.");
+  });
+
+  it("shows the confirmation straight away when the reader already gave an email", () => {
+    render(<NotifyMe code="abcdefghjk" alreadySubscribed />);
+    expect(screen.getByText("We will email you")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
+  it("is accessible", async () => {
+    const { container } = render(<NotifyMe code="abcdefghjk" />);
     expect(await axeViolations(container)).toEqual([]);
   });
 });

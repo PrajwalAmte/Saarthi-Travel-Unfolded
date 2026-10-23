@@ -139,6 +139,10 @@ app:
     overture-release: ${OVERTURE_RELEASE:}
     overture-radius-km: ${OVERTURE_RADIUS_KM:12}
     overture-min-confidence: 0.6
+    # Job types this instance runs, comma-separated; empty = all. A small web server should run only the light
+    # per-destination jobs and leave the multi-GB map imports (osm_extract, overture_places, heritage_monuments,
+    # wikidata_index) to a bigger machine; types left out are not planned here either.
+    job-types: ${INGESTION_JOB_TYPES:}
   freshness:
     stable-days: 1095
     semi-stable-days: 365

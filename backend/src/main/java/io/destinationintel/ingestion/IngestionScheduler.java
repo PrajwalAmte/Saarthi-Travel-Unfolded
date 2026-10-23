@@ -62,7 +62,7 @@ public class IngestionScheduler {
                                                WHERE p.wikidata_id = :q AND s.source_id = 'wikivoyage-en')
                                 """).param("q", q).query(Boolean.class).single())
                 .toList();
-        if (!missingSeeds.isEmpty()) {
+        if (!missingSeeds.isEmpty() && config.runs("wikidata_index")) {
             jobs.enqueue("wikidata_index", "wikidata", null, Map.of("qids", missingSeeds),
                     "wikidata_index:seeds:" + String.join(",", missingSeeds), 30, createdBy);
             for (String q : missingSeeds) {
@@ -73,7 +73,7 @@ public class IngestionScheduler {
         plan.put("seedGuides", missingSeeds);
         boolean indexed = jobs.lastSuccess("wikidata_index", null).isPresent()
                 && jdbc.sql("SELECT count(*) FROM place").query(Long.class).single() > 100;
-        if (!indexed) {
+        if (!indexed && config.runs("wikidata_index")) {
             jobs.enqueue("wikidata_index", "wikidata", null, Map.of(), "wikidata_index:all", 5, createdBy);
             plan.put("nationwideIndex", "queued");
         }
@@ -91,7 +91,7 @@ public class IngestionScheduler {
 
     public Map<String, Object> planRefreshes(String createdBy) {
         Map<String, Object> plan = new LinkedHashMap<>();
-        sources.find("wikidata").ifPresent(s -> {
+        sources.find("wikidata").filter(s -> config.runs("wikidata_index")).ifPresent(s -> {
             OffsetDateTime last = jobs.lastSuccess("wikidata_index", null).orElse(null);
             if (s.enabled() && (last == null || last.isBefore(OffsetDateTime.now().minusDays(s.refreshIntervalDays())))) {
                 jobs.enqueue("wikidata_index", "wikidata", null, Map.of(), "wikidata_index:all", 5, createdBy);
@@ -103,6 +103,10 @@ public class IngestionScheduler {
         // does nothing when it has not changed, so planning by interval is safe.
         for (String[] r : new String[][] {{"openstreetmap", "osm_extract"}, {"overture-places", "overture_places"},
                 {"asi-heritage", "heritage_monuments"}}) {
+            if (!config.runs(r[1])) {
+                plan.put(r[0], "not run on this instance");
+                continue;
+            }
             sources.find(r[0]).ifPresent(s -> {
                 OffsetDateTime last = jobs.lastSuccess(r[1], null).orElse(null);
                 if (s.enabled() && (last == null || last.isBefore(OffsetDateTime.now().minusDays(s.refreshIntervalDays())))) {
@@ -113,7 +117,7 @@ public class IngestionScheduler {
         }
 
         int wv = 0;
-        int interval = sources.find("wikivoyage-en").map(s -> s.enabled() ? s.refreshIntervalDays() : -1).orElse(-1);
+        int interval = !config.runs("wikivoyage_guide") ? -1 : sources.find("wikivoyage-en").map(s -> s.enabled() ? s.refreshIntervalDays() : -1).orElse(-1);
         if (interval > 0) {
             List<UUID> due = jdbc.sql("""
                             SELECT DISTINCT s.place_id FROM place_source_sync s
@@ -134,7 +138,7 @@ public class IngestionScheduler {
         int climate = refreshDue("open-meteo", "climate", "place_source_sync s WHERE s.source_id = 'open-meteo'", createdBy);
         plan.put("climateRefreshes", climate);
 
-        if (config.expansionPerDay() > 0) {
+        if (config.expansionPerDay() > 0 && config.runs("wikivoyage_guide")) {
             List<UUID> next = jdbc.sql("""
                             SELECT p.id FROM place p
                             WHERE p.wikivoyage_title IS NOT NULL AND p.wikivoyage_title NOT LIKE '%/%'
@@ -150,11 +154,16 @@ public class IngestionScheduler {
             plan.put("expansion", next.size());
         }
 
-        jobs.enqueue("coverage_refresh", null, null, Map.of(), "coverage_refresh:all", 0, createdBy);
+        if (config.runs("coverage_refresh")) {
+            jobs.enqueue("coverage_refresh", null, null, Map.of(), "coverage_refresh:all", 0, createdBy);
+        }
         return plan;
     }
 
     private int refreshDue(String sourceId, String jobType, String fromClause, String createdBy) {
+        if (!config.runs(jobType)) {
+            return 0;
+        }
         int interval = sources.find(sourceId).map(s -> s.enabled() ? s.refreshIntervalDays() : -1).orElse(-1);
         if (interval <= 0) {
             return 0;

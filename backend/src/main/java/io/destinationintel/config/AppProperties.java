@@ -66,11 +66,19 @@ public record AppProperties(
             String overtureStacUrl,
             String overtureRelease,
             double overtureRadiusKm,
-            double overtureMinConfidence) {
+            double overtureMinConfidence,
+            List<String> jobTypes) {
 
         public Ingestion {
             seedGuides = seedGuides == null ? List.of()
                     : seedGuides.stream().filter(StringUtils::hasText).map(String::trim).toList();
+            jobTypes = jobTypes == null ? List.of()
+                    : jobTypes.stream().filter(StringUtils::hasText).map(String::trim).toList();
+        }
+
+        /** Whether this instance runs (and plans) jobs of this type. An empty list means every type. */
+        public boolean runs(String jobType) {
+            return jobTypes.isEmpty() || jobTypes.contains(jobType);
         }
 
         public String userAgent() {

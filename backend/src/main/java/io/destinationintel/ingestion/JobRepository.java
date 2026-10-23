@@ -87,19 +87,27 @@ public class JobRepository {
                         ON CONFLICT (id) DO UPDATE SET seen_at = EXCLUDED.seen_at""").update();
     }
 
-    /** Atomically claims the next due job, or returns empty. */
+    /** Atomically claims the next due job of any type, or returns empty. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Optional<JobRow> claimNext() {
+        return claimNext(List.of());
+    }
+
+    /** Atomically claims the next due job among the given types (empty = any type), or returns empty. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public Optional<JobRow> claimNext(List<String> types) {
         Optional<UUID> id = jdbc.sql("""
                         UPDATE ingestion_job SET status = 'running', attempts = attempts + 1, started_at = now(),
                                heartbeat_at = now(), finished_at = NULL
                         WHERE id = (
                             SELECT id FROM ingestion_job
                             WHERE status = 'queued' AND next_attempt_at <= now()
+                              AND (:anyType OR job_type = ANY (string_to_array(:types, ',')))
                             ORDER BY priority DESC, next_attempt_at, created_at
                             FOR UPDATE SKIP LOCKED LIMIT 1)
                         RETURNING id
                         """)
+                .param("anyType", types.isEmpty()).param("types", String.join(",", types))
                 .query(UUID.class).optional();
         return id.flatMap(this::find);
     }

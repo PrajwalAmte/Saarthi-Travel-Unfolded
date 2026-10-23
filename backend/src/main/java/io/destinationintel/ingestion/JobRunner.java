@@ -26,11 +26,16 @@ public class JobRunner {
     private final JobRepository jobs;
     private final Map<String, JobHandler> handlers;
     private final boolean enabled;
+    private final List<String> jobTypes;
 
     public JobRunner(JobRepository jobs, List<JobHandler> handlers, AppProperties props) {
         this.jobs = jobs;
         this.handlers = handlers.stream().collect(Collectors.toMap(JobHandler::type, Function.identity()));
         this.enabled = props.ingestion().enabled();
+        this.jobTypes = props.ingestion().jobTypes();
+        if (enabled && !jobTypes.isEmpty()) {
+            log.info("Ingestion worker runs only these job types: {}", jobTypes);
+        }
     }
 
     @Scheduled(fixedDelayString = "${app.ingestion.poll-interval}", initialDelayString = "PT15S")
@@ -44,7 +49,7 @@ public class JobRunner {
             log.debug("Could not record importer heartbeat: {}", e.toString());
         }
         for (int i = 0; i < 25; i++) {
-            Optional<JobRow> next = jobs.claimNext();
+            Optional<JobRow> next = jobs.claimNext(jobTypes);
             if (next.isEmpty()) {
                 return;
             }

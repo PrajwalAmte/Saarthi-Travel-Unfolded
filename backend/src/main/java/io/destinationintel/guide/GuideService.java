@@ -6,6 +6,7 @@ import io.destinationintel.common.PageResponse;
 import io.destinationintel.guide.FreshnessPolicy.Assessment;
 import io.destinationintel.guide.GuideBaseLoader.GuideBase;
 import io.destinationintel.guide.GuideDtos.AreaCount;
+import io.destinationintel.guide.GuideDtos.Branch;
 import io.destinationintel.guide.GuideDtos.CategoryCount;
 import io.destinationintel.guide.GuideDtos.ClimateMonth;
 import io.destinationintel.guide.GuideDtos.ClimateView;
@@ -96,7 +97,7 @@ public class GuideService {
         List<EntryRow> inGroup = base.entries().stream().filter(e -> sections.contains(e.section())).toList();
 
         List<CategoryCount> categories = sections.stream()
-                .map(s -> new CategoryCount(s, SECTION_LABELS.get(s), (int) inGroup.stream().filter(e -> e.section().equals(s)).count()))
+                .map(s -> new CategoryCount(s, SECTION_LABELS.get(s), PlaceGrouping.countPlaces(inGroup.stream().filter(e -> e.section().equals(s)).toList())))
                 .filter(c -> c.count() > 0)
                 .toList();
 
@@ -110,8 +111,16 @@ public class GuideService {
             candidates.add(candidate(e, base));
         }
         RankingEngine.Result result = ranking.rank(group, candidates, prefs);
-        PageResponse<Ranked> slice = PageResponse.slice(result.ranked(), page, size);
-        PageResponse<EntryView> views = slice.map(r -> entryView(destination, byId.get(r.candidate().id()), base, r));
+        // One card per place: the best-ranked listing leads and its other branches ride along.
+        Map<String, List<Ranked>> places = new LinkedHashMap<>();
+        for (Ranked r : result.ranked()) {
+            places.computeIfAbsent(PlaceGrouping.key(byId.get(r.candidate().id())), k -> new ArrayList<>()).add(r);
+        }
+        PageResponse<List<Ranked>> slice = PageResponse.slice(new ArrayList<>(places.values()), page, size);
+        PageResponse<EntryView> views = slice.map(g -> {
+            EntryView lead = entryView(destination, byId.get(g.get(0).candidate().id()), base, g.get(0));
+            return g.size() == 1 ? lead : withBranches(destination, lead, g.subList(1, g.size()), byId, base);
+        });
 
         List<FactView> notes = new ArrayList<>();
         List<FactView> specialities = new ArrayList<>();
@@ -131,7 +140,7 @@ public class GuideService {
             notes.addAll(destinationFacts(base, Set.of("see", "do", "buy"), Set.of("general_tip")));
         }
 
-        return new SectionView(group.name().toLowerCase(Locale.ROOT), categories, views, filtered.size(),
+        return new SectionView(group.name().toLowerCase(Locale.ROOT), categories, views, PlaceGrouping.countPlaces(filtered),
                 prefs.hasSoftPreferences(), result.personalizationApplied(), result.personalizationNote(),
                 result.excludedByConstraints(), result.constraintNotes(), notes, specialities, links);
     }
@@ -196,7 +205,23 @@ public class GuideService {
         return new EntryView(e.id(), e.section(), e.subsection(), e.area(), e.title(), e.altTitle(), e.latitude(),
                 e.longitude(), e.distanceKm(), e.origin(), labels(e, attributes(e)), description, details,
                 mapUrl(destination, e), ranked == null ? null : ranked.score(),
-                ranked == null ? List.of() : ranked.reasons());
+                ranked == null ? List.of() : ranked.reasons(), List.of());
+    }
+
+    private EntryView withBranches(PlaceRow destination, EntryView lead, List<Ranked> others, Map<UUID, EntryRow> byId,
+                                   GuideBase base) {
+        List<Branch> branches = new ArrayList<>();
+        for (Ranked r : others) {
+            EntryRow row = byId.get(r.candidate().id());
+            EntryView v = entryView(destination, row, base, r);
+            // A branch repeats the shared description; keep its text only when it says something different.
+            FactView note = v.description() != null && lead.description() != null
+                    && v.description().text().strip().equals(lead.description().text().strip()) ? null : v.description();
+            branches.add(new Branch(v.id(), v.area(), v.subsection(), v.latitude(), v.longitude(), v.mapUrl(), note, v.details()));
+        }
+        return new EntryView(lead.id(), lead.section(), lead.subsection(), lead.area(), lead.title(), lead.altTitle(),
+                lead.latitude(), lead.longitude(), lead.distanceKm(), lead.origin(), lead.labels(), lead.description(),
+                lead.details(), lead.mapUrl(), lead.score(), lead.reasons(), branches);
     }
 
     private static int detailOrder(String kind) {
@@ -359,11 +384,11 @@ public class GuideService {
     public Map<String, Integer> sectionCounts(UUID destinationId) {
         GuideBase base = loader.load(destinationId);
         Map<String, Integer> counts = new LinkedHashMap<>();
-        counts.put("eat", (int) base.entries().stream().filter(e -> Set.of("eat", "drink").contains(e.section())).count()
+        counts.put("eat", PlaceGrouping.countPlaces(base.entries().stream().filter(e -> Set.of("eat", "drink").contains(e.section())).toList())
                 + (int) base.destinationFacts().stream().filter(f -> f.kind().equals("speciality") && Set.of("eat", "drink").contains(f.section())).count());
-        counts.put("stay", (int) base.entries().stream().filter(e -> e.section().equals("stay")).count()
+        counts.put("stay", PlaceGrouping.countPlaces(base.entries().stream().filter(e -> e.section().equals("stay")).toList())
                 + (int) base.destinationFacts().stream().filter(f -> f.section().equals("stay")).count());
-        counts.put("explore", (int) base.entries().stream().filter(e -> Set.of("see", "do", "buy").contains(e.section())).count());
+        counts.put("explore", PlaceGrouping.countPlaces(base.entries().stream().filter(e -> Set.of("see", "do", "buy").contains(e.section())).toList()));
         counts.put("neighbourhoods", (int) base.entries().stream().filter(e -> e.section().equals("neighbourhood")).count()
                 + (int) base.destinationFacts().stream().filter(f -> Set.of("accommodation_note", "orientation", "neighbourhood_character").contains(f.kind())).count());
         counts.put("budget", (int) base.factsByEntry().values().stream().flatMap(List::stream).filter(f -> f.kind().equals("price")).count());

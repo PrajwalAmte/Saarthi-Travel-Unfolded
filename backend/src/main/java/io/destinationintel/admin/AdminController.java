@@ -7,6 +7,7 @@ import io.destinationintel.common.PageResponse;
 import io.destinationintel.community.CurrentUser;
 import io.destinationintel.community.UserRepository;
 import io.destinationintel.community.UserRepository.AppUserRow;
+import io.destinationintel.guide.GuideReadinessService;
 import io.destinationintel.ingestion.IngestionScheduler;
 import io.destinationintel.ingestion.JobRepository;
 import io.destinationintel.ingestion.JobRepository.JobRow;
@@ -72,10 +73,11 @@ public class AdminController {
     private final AuditService audit;
     private final JdbcClient jdbc;
     private final Json json;
+    private final GuideReadinessService readiness;
 
     public AdminController(CurrentUser current, JobRepository jobs, IngestionScheduler scheduler, SourceRepository sources,
                            PlaceRepository places, UserRepository users, RequestService requests, AuditService audit,
-                           JdbcClient jdbc, Json json) {
+                           JdbcClient jdbc, Json json, GuideReadinessService readiness) {
         this.current = current;
         this.jobs = jobs;
         this.scheduler = scheduler;
@@ -86,6 +88,13 @@ public class AdminController {
         this.audit = audit;
         this.jdbc = jdbc;
         this.json = json;
+        this.readiness = readiness;
+    }
+
+    @GetMapping("/destinations/{slug}/readiness")
+    @Operation(summary = "Is this guide clean and complete enough to feature? Lists each check that passes or fails")
+    public GuideReadinessService.Readiness readiness(@PathVariable String slug) {
+        return readiness.check(slug);
     }
 
     @GetMapping("/ingestion/jobs")

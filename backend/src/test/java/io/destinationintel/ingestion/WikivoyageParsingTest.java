@@ -128,4 +128,20 @@ class WikivoyageParsingTest {
         assertThat(WikiText.truncateAtSentence("One. Two. Three is longer.", 12)).isEqualTo("One. Two.");
         assertThat(WikiText.templates("{{eat|name=A {{nested|x}}|content=y}} text {{see|name=B}}")).hasSize(2);
     }
+
+    @Test
+    void droppedTemplatesLeaveNoEmptyBracketsBehind() {
+        assertThat(WikiText.toPlain("Booking office: 11A, Free School St, Kolkata ({{phone|+91 33 1234}})."))
+                .isEqualTo("Booking office: 11A, Free School St, Kolkata.");
+        assertThat(WikiText.toPlain("There is a heritage cafe on the first floor (see {{eat}}), with a view."))
+                .isEqualTo("There is a heritage cafe on the first floor, with a view.");
+        assertThat(WikiText.toPlain("Open late [{{x}}] daily ( ) ."))
+                .isEqualTo("Open late daily.");
+        // Real parentheses are untouched.
+        assertThat(WikiText.toPlain("Try the biryani (mutton) at the Park Street branch (see below)."))
+                .isEqualTo("Try the biryani (mutton) at the Park Street branch (see below).");
+        assertThat(WikiText.hasArtifacts("Kolkata ()")).isTrue();
+        assertThat(WikiText.hasArtifacts("(see )")).isTrue();
+        assertThat(WikiText.hasArtifacts("Kolkata (West Bengal)")).isFalse();
+    }
 }

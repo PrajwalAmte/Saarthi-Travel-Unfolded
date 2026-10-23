@@ -66,6 +66,7 @@ export function entry(overrides: Partial<Entry> = {}): Entry {
     mapUrl: "https://www.google.com/maps/search/?api=1&query=12.300000%2C76.600000",
     score: 3.2,
     reasons: [{ code: "price_match", text: "Budget-friendly: Listed under “Budget”" }],
+    branches: [],
     ...overrides,
   };
 }

@@ -79,7 +79,17 @@ class GuideApiIT extends IntegrationTest {
         assertThat(d.path("coverage").path("checks").size()).isGreaterThan(3);
 
         JsonNode eat = body(mvc.perform(get("/api/destinations/testville/sections/eat")).andExpect(status().isOk()).andReturn());
-        assertThat(eat.path("totalPublished").asInt()).isEqualTo(4);
+        // Four listings, but "Hotel Example" is one place with a second branch, so three places.
+        assertThat(eat.path("totalPublished").asInt()).isEqualTo(3);
+        assertThat(eat.path("entries").path("items").size()).isEqualTo(3);
+        for (JsonNode e : eat.path("entries").path("items")) {
+            if (e.path("title").asString().equals("Hotel Example")) {
+                assertThat(e.path("branches").size()).isEqualTo(1);
+                assertThat(e.path("branches").path(0).path("mapUrl").asString()).startsWith("https://www.google.com/maps/search/");
+            } else {
+                assertThat(e.path("branches").size()).isZero();
+            }
+        }
         JsonNode first = eat.path("entries").path("items").path(0);
         assertThat(first.path("description").path("verificationStatus").asString()).isNotBlank();
         assertThat(first.path("description").path("verificationCount").asInt()).isZero();

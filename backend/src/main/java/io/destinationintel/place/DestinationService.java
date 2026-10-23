@@ -101,7 +101,7 @@ public class DestinationService {
                                img.image_url,
                                CASE WHEN img.image_url IS NULL THEN NULL
                                     ELSE concat_ws(', ', nullif(img.artist, ''), img.licence_name) END AS image_credit,
-                               (SELECT count(*) FROM guide_entry e WHERE e.destination_id = p.id AND e.status = 'published'
+                               (SELECT count(DISTINCT (e.section, e.title_normalized)) FROM guide_entry e WHERE e.destination_id = p.id AND e.status = 'published'
                                   AND e.section <> 'neighbourhood') AS entry_count
                         FROM place p
                         LEFT JOIN destination_profile dp ON dp.place_id = p.id

@@ -71,7 +71,19 @@ public final class GuideDtos {
             List<FactView> details,
             String mapUrl,
             Double score,
-            List<Reason> reasons) {}
+            List<Reason> reasons,
+            List<Branch> branches) {}
+
+    /** Another location of the same place (a chain's other outlets), shown on the one card. */
+    public record Branch(
+            UUID id,
+            String area,
+            String subsection,
+            Double latitude,
+            Double longitude,
+            String mapUrl,
+            FactView note,
+            List<FactView> details) {}
 
     public record SectionView(
             String section,
@@ -121,7 +133,8 @@ public final class GuideDtos {
             LocalDate latestObserved,
             int needingReverification,
             String unit,
-            List<UUID> factIds) {}
+            List<UUID> factIds,
+            String reliability) {}
 
     public record BudgetView(
             String currency,

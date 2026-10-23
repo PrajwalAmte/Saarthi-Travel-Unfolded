@@ -143,7 +143,22 @@ public class BudgetService {
                 .max(LocalDate::compareTo).orElse(null);
         int due = (int) sorted.stream().filter(Observation::due).count();
         return new BudgetRange(key, label, tier, low, median, high, n, earliest, latest, due, unit,
-                sorted.stream().map(Observation::factId).toList());
+                sorted.stream().map(Observation::factId).toList(), reliability(n, due));
+    }
+
+    /**
+     * How far a range can be trusted, so the page never presents two old prices as an estimate:
+     * "too_few" (fewer than 3 prices), "all_stale" (every price is past its review window),
+     * "mostly_stale" (half or more are) or "ok".
+     */
+    static String reliability(int observations, int due) {
+        if (observations < MIN_OBSERVATIONS_FOR_RANGE) {
+            return "too_few";
+        }
+        if (due >= observations) {
+            return "all_stale";
+        }
+        return due * 2 >= observations ? "mostly_stale" : "ok";
     }
 
     static int percentileIndex(int n, double p) {

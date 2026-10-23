@@ -93,11 +93,13 @@ describe("coverage and section states", () => {
     const { rerender } = render(<CoverageBadge status="indexed" />);
     expect(screen.getByText("No guide yet")).toBeInTheDocument();
     rerender(<CoverageBadge status="building" />);
-    expect(screen.getByText("Guide in progress")).toBeInTheDocument();
+    expect(screen.getByText("Being built")).toBeInTheDocument();
     rerender(<CoverageBadge status="needs_refresh" />);
-    expect(screen.getByText("Guide")).toBeInTheDocument();
+    expect(screen.getByText("Needs rechecking")).toBeInTheDocument();
+    rerender(<CoverageBadge status="usable" />);
+    expect(screen.getByText("Good coverage")).toBeInTheDocument();
     rerender(<CoverageBadge status="well_covered" />);
-    expect(screen.getByText("Full guide")).toBeInTheDocument();
+    expect(screen.getByText("Well covered")).toBeInTheDocument();
   });
 
   it("shows an empty state with a way to contribute when nothing is published", () => {
@@ -153,7 +155,7 @@ describe("coverage and section states", () => {
         slug="testville"
         data={{
           currency: "INR",
-          ranges: [{ category: "meals", label: "Food", tier: null, low: 50, median: 80, high: 150, observations: 5, earliestObserved: "2021-01-01", latestObserved: "2025-01-01", needingReverification: 4, unit: "per dish or meal, as listed", factIds: [] }],
+          ranges: [{ category: "meals", label: "Food", tier: null, low: 50, median: 80, high: 150, observations: 5, earliestObserved: "2021-01-01", latestObserved: "2025-01-01", needingReverification: 4, unit: "per dish or meal, as listed", factIds: [], reliability: "mostly_stale" }],
           assumptions: ["Figures come from prices written in guide listings."],
           priceFactsConsidered: 5,
           priceFactsWithoutAmount: 0,
@@ -162,7 +164,53 @@ describe("coverage and section states", () => {
       />,
     );
     expect(screen.getByText("₹50 – ₹150")).toBeInTheDocument();
-    expect(screen.getByText("4 may be dated")).toBeInTheDocument();
+    expect(screen.getByText("4 of 5 need rechecking")).toBeInTheDocument();
     expect(screen.getByText("Figures come from prices written in guide listings.")).toBeInTheDocument();
+  });
+
+  it("never shows two old prices as an estimate", () => {
+    const base = { tier: null, median: 250, observations: 2, needingReverification: 2, unit: "per dish or meal, as listed", factIds: [] };
+    render(
+      <BudgetTable
+        slug="new-delhi"
+        data={{
+          currency: "INR",
+          ranges: [
+            { ...base, category: "meals", label: "Food", low: 250, high: 525, earliestObserved: "2022-09-10", latestObserved: "2022-09-10", reliability: "too_few" },
+            { ...base, category: "stays", label: "Accommodation", low: 4000, median: 7937, high: 14500, observations: 9, needingReverification: 9, earliestObserved: "2015-06-03", latestObserved: "2026-07-10", reliability: "all_stale" },
+          ],
+          assumptions: [],
+          priceFactsConsidered: 11,
+          priceFactsWithoutAmount: 0,
+          emptyReason: null,
+        }}
+      />,
+    );
+    expect(screen.getByText("Not enough recent prices for an estimate")).toBeInTheDocument();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.queryByText("Typical range")).not.toBeInTheDocument();
+    expect(screen.getByText(/2 prices \(₹250 – ₹525\), sept 2022/)).toBeInTheDocument();
+    expect(screen.getByText(/all need rechecking/)).toBeInTheDocument();
+  });
+
+  it("shows a chain once with its other locations", () => {
+    render(
+      <EntryCard
+        destinationId="d"
+        destinationSlug="kolkata"
+        entry={entry({
+          title: "Arsalan Restaurant & Caterer",
+          area: "Esplanade",
+          branches: [
+            { id: "b1", area: "South Kolkata", subsection: "Park Circus", latitude: 22.54, longitude: 88.36, mapUrl: "https://www.google.com/maps/search/?api=1&query=22.54%2C88.36", note: null, details: [] },
+            { id: "b2", area: "North Kolkata", subsection: "Shyambazar", latitude: null, longitude: null, mapUrl: "https://www.google.com/maps/search/?api=1&query=Arsalan", note: null, details: [] },
+          ],
+        })}
+      />,
+    );
+    expect(screen.getAllByRole("heading", { name: /Arsalan Restaurant/ })).toHaveLength(1);
+    expect(screen.getByText("Also at 2 other locations")).toBeInTheDocument();
+    expect(screen.getByText("South Kolkata · Park Circus")).toBeInTheDocument();
+    expect(screen.getByText("North Kolkata · Shyambazar")).toBeInTheDocument();
   });
 });

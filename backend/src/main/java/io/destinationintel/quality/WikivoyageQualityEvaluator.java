@@ -73,7 +73,34 @@ public class WikivoyageQualityEvaluator implements SourceQualityEvaluator {
                 WHERE a.status = 'published'""");
         checks.add(QualityCheck.atMost("duplicate_entries", "duplicates", QualityCheck.WARNING,
                 "Same-name entries at the same place or address (%)", Pct.of(dupes, listingEntries), 0.5,
-                "branches of a chain at different addresses are kept as separate entries"));
+                "branches of a chain at different addresses are shown as one place with its other locations"));
+        // Text that shows an import defect to readers: empty brackets and "(see )" left by dropped templates, and
+        // brackets that never close. Any such text fails the import, so the defect cannot reach a guide again.
+        long artifacts = count("SELECT count(*) " + wvFacts + " AND (f.value_text ~* '\\((?:see|see also|cf\\.?|compare|also)[ \\t,;:]*\\)' OR f.value_text ~ '[(\\[][ \\t]*[)\\]]')");
+        checks.add(QualityCheck.atMost("text_artifacts", "text", QualityCheck.CRITICAL,
+                "Published texts with empty brackets or a dangling \"(see )\"", artifacts, 0,
+                "left behind when a wiki template is dropped; WikiText.cleanArtifacts removes them on import"));
+        long unbalanced = count("SELECT count(*) " + wvFacts + " AND f.kind IN ('description', 'address', 'what_to_order', 'summary')"
+                + " AND length(f.value_text) - length(replace(f.value_text, '(', '')) <> length(f.value_text) - length(replace(f.value_text, ')', ''))");
+        checks.add(QualityCheck.atMost("unbalanced_brackets", "text", QualityCheck.WARNING,
+                "Descriptions and addresses with unbalanced brackets (%)", Pct.of(unbalanced, facts), 0.5,
+                "usually truncated or half-stripped markup"));
+        // A landmark under "Eat" or "Stay" is only right when its text is about food or lodging ("food courts at India Gate").
+        long misfiled = count("""
+                SELECT count(*) FROM guide_entry e
+                WHERE e.status = 'published' AND e.ingest_key LIKE 'wv:%' AND e.section IN ('eat', 'drink', 'stay')
+                  AND e.title ~* '\\m(gate|fort|temple|palace|museum|memorial|tomb|mosque|church|monument|bridge|lake|beach|garden|zoo|ghat)\\M'
+                  AND NOT EXISTS (SELECT 1 FROM fact f WHERE f.entry_id = e.id AND f.kind = 'description' AND f.status = 'published'
+                                  AND f.value_text ~* '(food|restaurant|caf[eé]|eat|meal|dine|dining|cuisine|snack|stall|thali|biryani|hotel|room|guest ?house|lodg|dorm|hostel|bed|stay)')""");
+        checks.add(QualityCheck.atMost("misfiled_landmarks", "relevance", QualityCheck.WARNING,
+                "Landmarks listed under Eat or Stay whose text is not about food or lodging (%)", Pct.of(misfiled, listingEntries), 0.5,
+                "an eating or sleeping listing must say what it offers"));
+        long chainPlaces = count("""
+                SELECT count(*) FROM (SELECT destination_id, section, title_normalized FROM guide_entry
+                    WHERE status = 'published' AND section <> 'neighbourhood' GROUP BY 1, 2, 3 HAVING count(*) > 1) x""");
+        m.put("placesShownWithSeveralBranches", chainPlaces);
+        m.put("textArtifacts", artifacts);
+        m.put("misfiledLandmarks", misfiled);
         long sameNameElsewhere = count("""
                 SELECT count(*) FROM (SELECT destination_id, title_normalized FROM guide_entry WHERE status = 'published'
                     AND section <> 'neighbourhood' GROUP BY 1, 2 HAVING count(*) > 1) x""");

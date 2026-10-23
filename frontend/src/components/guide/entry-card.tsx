@@ -135,6 +135,31 @@ export function EntryCard({ entry, destinationId, destinationSlug, rank }: { ent
         </div>
       ) : null}
 
+      {entry.branches?.length ? (
+        <section className="mt-4" aria-label={`Other locations of ${entry.title}`}>
+          <h4 className="text-sm font-medium text-ink">
+            Also at {entry.branches.length} other location{entry.branches.length === 1 ? "" : "s"}
+          </h4>
+          <ul className="mt-2 divide-y divide-line rounded-md border border-line text-sm">
+            {entry.branches.map((b) => (
+              <li key={b.id} className="px-3 py-2">
+                <div className="flex flex-wrap items-center justify-between gap-x-3">
+                  <span className="font-medium text-ink-2">{[b.area, b.subsection].filter(Boolean).join(" · ") || "Another branch"}</span>
+                  <a href={b.mapUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-accent underline">
+                    <MapPin className="size-4" aria-hidden />
+                    {b.latitude !== null ? "Map" : "Find on map"}
+                  </a>
+                </div>
+                {b.note ? <p className="mt-1 text-ink-2">{b.note.text}</p> : null}
+                {b.details.map((f) => (
+                  <DetailRow key={f.id} fact={f} destinationId={destinationId} description={b.note?.text ?? entry.description?.text ?? null} />
+                ))}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       {entry.reasons.length ? (
         <details className="group mt-3 text-sm">
           <summary className="cursor-pointer select-none text-muted hover:text-ink">Why it&apos;s listed</summary>

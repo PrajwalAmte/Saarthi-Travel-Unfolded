@@ -26,6 +26,11 @@ public final class WikiText {
     private static final Pattern EXT_LINK_LABEL = Pattern.compile("\\[(?:https?:)?//[^\\s\\]]+\\s+([^\\]]+)]");
     private static final Pattern EXT_LINK_BARE = Pattern.compile("\\[(?:https?:)?//[^\\s\\]]+]");
     private static final Pattern BOLD_ITALIC = Pattern.compile("'{2,5}");
+    /** What is left when a template inside brackets is dropped: "()", "[]", "(see )". */
+    private static final Pattern EMPTY_BRACKETS = Pattern.compile("[ \\t]*[(\\[][ \\t]*[)\\]]");
+    private static final Pattern DANGLING_SEE = Pattern.compile(
+            "[ \\t]*\\((?:see|see also|cf\\.?|compare|also)[ \\t,;:]*\\)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern SPACE_BEFORE_PUNCT = Pattern.compile("[ \\t]+([,.;:])");
     private static final Pattern MULTI_SPACE = Pattern.compile("[ \\t\\u00A0]+");
 
     private WikiText() {}
@@ -172,7 +177,7 @@ public final class WikiText {
         s = Parser.unescapeEntities(s, false);
         StringBuilder out = new StringBuilder();
         for (String line : s.split("\n")) {
-            String l = MULTI_SPACE.matcher(line).replaceAll(" ").trim();
+            String l = cleanArtifacts(MULTI_SPACE.matcher(line).replaceAll(" ").trim());
             if (l.startsWith("*") || l.startsWith("#")) {
                 l = ("• " + l.replaceFirst("^[*#:]+\\s*", "")).trim();
             } else if (l.startsWith(":") || l.startsWith(";")) {
@@ -184,6 +189,26 @@ public final class WikiText {
             out.append(l).append('\n');
         }
         return out.toString().replaceAll("\n{3,}", "\n\n").trim();
+    }
+
+    /**
+     * Removes leftovers of dropped templates so a listing never shows "Kolkata ()" or "(see )". The same rules are
+     * applied to stored text by the migration that cleaned existing guides, and the quality gate fails an import
+     * that still contains them.
+     */
+    public static String cleanArtifacts(String text) {
+        if (text == null || text.isEmpty()) {
+            return text;
+        }
+        String s = DANGLING_SEE.matcher(text).replaceAll("");
+        s = EMPTY_BRACKETS.matcher(s).replaceAll("");
+        s = SPACE_BEFORE_PUNCT.matcher(s).replaceAll("$1");
+        return s.trim();
+    }
+
+    /** True when the text still contains an empty bracket pair or a dangling "(see )". */
+    public static boolean hasArtifacts(String text) {
+        return text != null && (EMPTY_BRACKETS.matcher(text).find() || DANGLING_SEE.matcher(text).find());
     }
 
     private static String removeTables(String s) {

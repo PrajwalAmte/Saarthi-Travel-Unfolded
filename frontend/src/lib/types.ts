@@ -103,6 +103,19 @@ export type Entry = {
   mapUrl: string;
   score: number | null;
   reasons: Reason[];
+  branches: Branch[];
+};
+
+/** Another outlet of the same place (a chain), shown on the one card. */
+export type Branch = {
+  id: string;
+  area: string | null;
+  subsection: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  mapUrl: string;
+  note: Fact | null;
+  details: Fact[];
 };
 
 export type CategoryCount = { key: string; label: string; count: number };
@@ -156,6 +169,8 @@ export type BudgetRange = {
   needingReverification: number;
   unit: string;
   factIds: string[];
+  /** ok | mostly_stale | all_stale | too_few: whether this can be shown as an estimate. */
+  reliability: "ok" | "mostly_stale" | "all_stale" | "too_few";
 };
 export type BudgetView = {
   currency: string;

@@ -156,7 +156,7 @@ public class SyncRunRecorder {
         if (fetched == 0 && expectRecords) {
             run.warn("The source returned zero records; this run did not change any data.");
         }
-        if (previous.isPresent() && previous.get() > 0) {
+        if (expectRecords && previous.isPresent() && previous.get() > 0) {
             double ratio = (double) fetched / previous.get();
             if (fetched == 0) {
                 run.warn("Unexpected zero records: the previous successful run fetched " + previous.get() + ".");

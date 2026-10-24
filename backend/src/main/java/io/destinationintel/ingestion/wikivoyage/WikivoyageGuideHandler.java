@@ -192,7 +192,8 @@ public class WikivoyageGuideHandler implements JobHandler {
             if (!qualityFailed) {
                 recorder.markPublished(WikivoyageMapper.SOURCE_ID);
             }
-            stats.put("syncStatus", recorder.finish(run, qualityFailed, true));
+            // When every article is on the revision we already hold, fetching nothing is the expected result, not a warning.
+            stats.put("syncStatus", recorder.finish(run, qualityFailed, run.unchanged.get() == 0));
             stats.put("run", run.summary());
 
             // Make sure supporting data exists for a destination that now has guide content.

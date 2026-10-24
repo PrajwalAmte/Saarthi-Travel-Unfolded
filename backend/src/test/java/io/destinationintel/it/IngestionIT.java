@@ -44,6 +44,7 @@ class IngestionIT extends IntegrationTest {
 
         JobRow second = ingestGuide(city);
         assertThat(second.stats()).contains("\"unchanged\"");
+        assertThat(second.stats()).as("re-checking an unchanged article is not a warning").contains("\"syncStatus\": \"succeeded\"");
         assertThat(count("SELECT count(*) FROM guide_entry WHERE destination_id = :p", city)).isEqualTo(entries);
         assertThat(count("SELECT count(*) FROM fact WHERE destination_id = :p", city)).isEqualTo(facts);
         assertThat(count("SELECT count(*) FROM evidence e JOIN fact f ON f.id = e.fact_id WHERE f.destination_id = :p", city)).isEqualTo(evidence);

@@ -18,6 +18,8 @@ import io.destinationintel.guide.GuideDtos.FactView;
 import io.destinationintel.guide.GuideDtos.Label;
 import io.destinationintel.guide.GuideDtos.NeighbourhoodSectionView;
 import io.destinationintel.guide.GuideDtos.NeighbourhoodView;
+import io.destinationintel.guide.GuideDtos.RecheckItem;
+import io.destinationintel.guide.GuideDtos.RecheckView;
 import io.destinationintel.guide.GuideDtos.SectionView;
 import io.destinationintel.guide.GuideRows.EntryRow;
 import io.destinationintel.guide.GuideRows.EvidenceRow;
@@ -143,6 +145,75 @@ public class GuideService {
         return new SectionView(group.name().toLowerCase(Locale.ROOT), categories, views, PlaceGrouping.countPlaces(filtered),
                 prefs.hasSoftPreferences(), result.personalizationApplied(), result.personalizationNote(),
                 result.excludedByConstraints(), result.constraintNotes(), notes, specialities, links);
+    }
+
+    /**
+     * The prices and opening hours a contributor should confirm first: the top listings of each tab, in the order a
+     * traveller sees them, whose price or hours are past their review window or undated. Facts already confirmed or
+     * disputed are left to the normal flow.
+     */
+    public RecheckView recheckWorklist(PlaceRow destination, int perSection) {
+        GuideBase base = loader.load(destination.id());
+        Map<String, Integer> dueBySection = new LinkedHashMap<>();
+        int totalDue = 0;
+        for (EntryRow e : base.entries()) {
+            for (FactRow f : base.factsFor(e.id())) {
+                if (isRecheckable(f)) {
+                    String tab = tabOf(e.section());
+                    dueBySection.merge(tab, 1, Integer::sum);
+                    totalDue++;
+                }
+            }
+        }
+        List<RecheckItem> items = new ArrayList<>();
+        for (Group group : List.of(Group.EAT, Group.STAY, Group.EXPLORE)) {
+            SectionView sv = entriesSection(destination, group, Preferences.none(), null, 0, perSection);
+            int rank = 0;
+            for (EntryView entry : sv.entries().items()) {
+                rank++;
+                for (FactView f : entry.details()) {
+                    if ((f.kind().equals("price") || f.kind().equals("hours")) && needsRecheck(f)) {
+                        items.add(new RecheckItem(group.name().toLowerCase(Locale.ROOT), rank, entry.id(), entry.title(),
+                                entry.area(), entry.mapUrl(), f.kind().equals("price") && f.value() != null && f.value().get("min") instanceof Number,
+                                f));
+                    }
+                }
+                // Other outlets of the same place carry their own prices and hours.
+                for (GuideDtos.Branch b : entry.branches()) {
+                    for (FactView f : b.details()) {
+                        if ((f.kind().equals("price") || f.kind().equals("hours")) && needsRecheck(f)) {
+                            items.add(new RecheckItem(group.name().toLowerCase(Locale.ROOT), rank, b.id(), entry.title(),
+                                    b.area(), b.mapUrl(), f.kind().equals("price") && f.value() != null && f.value().get("min") instanceof Number,
+                                    f));
+                        }
+                    }
+                }
+            }
+        }
+        return new RecheckView(destination.slug(), destination.name(), totalDue, items.size(), items, dueBySection);
+    }
+
+    private boolean isRecheckable(FactRow f) {
+        if (!(f.kind().equals("price") || f.kind().equals("hours"))) {
+            return false;
+        }
+        Assessment a = presenter.assess(f);
+        return a.freshness() != FreshnessPolicy.Freshness.CURRENT
+                && a.status() != FreshnessPolicy.VerificationStatus.CONFLICTING_REPORTS
+                && a.status() != FreshnessPolicy.VerificationStatus.COMMUNITY_VERIFIED;
+    }
+
+    private static boolean needsRecheck(FactView f) {
+        return !f.freshness().equals("current") && !f.verificationStatus().equals("conflicting_reports")
+                && !f.verificationStatus().equals("community_verified");
+    }
+
+    private static String tabOf(String section) {
+        return switch (section) {
+            case "eat", "drink" -> "eat";
+            case "stay" -> "stay";
+            default -> "explore";
+        };
     }
 
     Candidate candidate(EntryRow e, GuideBase base) {

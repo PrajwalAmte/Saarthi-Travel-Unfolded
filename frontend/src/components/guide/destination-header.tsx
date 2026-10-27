@@ -42,6 +42,11 @@ export function DestinationHeader({ d }: { d: DestinationDetail }) {
           <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-2">
             <CoverageBadge status={d.coverage.status} />
             <span>{MATURITY_NOTE[d.coverage.status]}</span>
+            {d.guideAvailable ? (
+              <Link href={`/d/${d.slug}/recheck`} className="text-accent underline">
+                Help check it
+              </Link>
+            ) : null}
           </p>
           {latinAliases.length || localAliases.length ? (
             <p className="mt-2 text-sm text-ink-2">

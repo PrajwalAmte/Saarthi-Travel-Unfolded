@@ -83,6 +83,26 @@ export type Fact = {
   evidence: Evidence[];
 };
 
+/** A price or opening-hours fact worth confirming, in the order a traveller meets its listing. */
+export type RecheckItem = {
+  section: "eat" | "stay" | "explore";
+  rank: number;
+  entryId: string;
+  title: string;
+  area: string | null;
+  mapUrl: string;
+  mapsToBudget: boolean;
+  fact: Fact;
+};
+export type RecheckView = {
+  slug: string;
+  name: string;
+  totalDue: number;
+  shown: number;
+  items: RecheckItem[];
+  dueBySection: Record<string, number>;
+};
+
 export type Label = { code: string; text: string; basis: string | null };
 export type Reason = { code: string; text: string };
 

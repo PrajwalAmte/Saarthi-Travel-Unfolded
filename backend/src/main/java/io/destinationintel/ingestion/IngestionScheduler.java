@@ -142,7 +142,9 @@ public class IngestionScheduler {
             List<UUID> next = jdbc.sql("""
                             SELECT p.id FROM place p
                             WHERE p.wikivoyage_title IS NOT NULL AND p.wikivoyage_title NOT LIKE '%/%'
-                              AND p.kind IN ('city', 'town', 'village', 'island', 'park', 'region')
+                              AND p.kind IN ('city', 'town', 'village', 'island', 'park')
+                              AND p.is_destination
+                              AND EXISTS (SELECT 1 FROM place_relation r WHERE r.child_id = p.id AND r.relation = 'in_state')
                               AND NOT EXISTS (SELECT 1 FROM place_source_sync s WHERE s.place_id = p.id AND s.source_id = 'wikivoyage-en')
                               AND NOT EXISTS (SELECT 1 FROM ingestion_job j WHERE j.target_place_id = p.id
                                               AND j.job_type = 'wikivoyage_guide' AND j.created_at > now() - interval '1 day')

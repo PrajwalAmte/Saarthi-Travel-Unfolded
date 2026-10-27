@@ -94,6 +94,15 @@ public class DestinationController {
         return ResponseEntity.ok().cacheControl(PUBLIC_SHORT).body(destinations.detail(slug));
     }
 
+    @GetMapping("/destinations/{slug}/recheck")
+    @Operation(summary = "Prices and opening hours worth rechecking first, in the order travellers see the listings",
+            description = "Top listings of Eat, Stay and Explore whose price or hours are past their review window or undated.")
+    public io.destinationintel.guide.GuideDtos.RecheckView recheck(@PathVariable @Pattern(regexp = SLUG) String slug,
+                                         @RequestParam(required = false) Integer perSection) {
+        int n = perSection == null ? 12 : Math.max(1, Math.min(30, perSection));
+        return guide.recheckWorklist(destinations.require(slug), n);
+    }
+
     @GetMapping("/destinations/{slug}/sections/{section}")
     @Operation(summary = "Ranked guide entries for the eat, stay or explore tab",
             description = "Soft preferences (food, budget, comfort, interests) change ranking; maxPrice and accessibleOnly filter before ranking.")

@@ -74,6 +74,13 @@ public final class GuideDtos {
             List<Reason> reasons,
             List<Branch> branches) {}
 
+    /** One price or opening-hours fact worth a contributor's eyes, in the order travellers meet it. */
+    public record RecheckItem(String section, int rank, UUID entryId, String title, String area, String mapUrl,
+                              boolean mapsToBudget, FactView fact) {}
+
+    public record RecheckView(String slug, String name, int totalDue, int shown, List<RecheckItem> items,
+                              Map<String, Integer> dueBySection) {}
+
     /** Another location of the same place (a chain's other outlets), shown on the one card. */
     public record Branch(
             UUID id,

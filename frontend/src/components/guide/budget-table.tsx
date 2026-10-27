@@ -77,7 +77,11 @@ export function BudgetTable({ data, slug }: { data: BudgetView; slug: string }) 
         <section aria-label="Not enough recent prices">
           <Notice tone="info" title="Not enough recent prices for an estimate">
             For these categories we have too few listings, or every price we have is out of date, so we do not show a typical range.
-            What we do have is listed below for reference only.
+            What we do have is listed below for reference only. Know the place?{" "}
+            <Link href={`/d/${slug}/recheck`} className="underline">
+              Help check its prices
+            </Link>
+            .
           </Notice>
           <ul className="mt-3 divide-y divide-line rounded-lg border border-line text-sm text-ink-2">
             {thin.map((r) => (

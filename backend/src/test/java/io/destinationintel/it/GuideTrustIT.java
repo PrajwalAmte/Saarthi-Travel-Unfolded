@@ -136,4 +136,50 @@ class GuideTrustIT extends IntegrationTest {
         }
         mvc.perform(get("/api/admin/destinations/no-such-place/readiness").cookie(admin)).andExpect(status().isNotFound());
     }
+
+    @Autowired io.destinationintel.guide.CoverageService coverage;
+
+    @Test
+    void aPlaceWithNoListingsIsNotCountedAsAGuide() throws Exception {
+        UUID city = ingestedTestville();
+        assertThat(coverage.refresh(city).status()).isNotEqualTo("indexed");
+        jdbc.sql("UPDATE guide_entry SET status = 'hidden' WHERE destination_id = :p").param("p", city).update();
+        caches.getCacheNames().forEach(n -> caches.getCache(n).clear());
+        assertThat(coverage.refresh(city).status()).as("a climate note alone is not a guide").isEqualTo("indexed");
+    }
+
+    @Test
+    void recheckWorklistListsStalePricesAndHoursInTheOrderTravellersSeeThem() throws Exception {
+        ingestedTestville();
+        JsonNode w = body(mvc.perform(get("/api/destinations/testville/recheck")).andExpect(status().isOk()).andReturn());
+        assertThat(w.path("name").asString()).isEqualTo("Testville");
+        assertThat(w.path("items").size()).isGreaterThan(0);
+        assertThat(w.path("shown").asInt()).isEqualTo(w.path("items").size());
+        assertThat(w.path("totalDue").asInt()).isGreaterThanOrEqualTo(w.path("shown").asInt());
+
+        int lastSection = -1;
+        int lastRank = 0;
+        java.util.List<String> order = java.util.List.of("eat", "stay", "explore");
+        for (JsonNode item : w.path("items")) {
+            int section = order.indexOf(item.path("section").asString());
+            assertThat(section).isGreaterThanOrEqualTo(lastSection);
+            if (section != lastSection) {
+                lastRank = 0;
+            }
+            assertThat(item.path("rank").asInt()).as("listings keep the order readers see").isGreaterThanOrEqualTo(lastRank);
+            lastSection = section;
+            lastRank = item.path("rank").asInt();
+            assertThat(item.path("fact").path("kind").asString()).isIn("price", "hours");
+            assertThat(item.path("fact").path("freshness").asString()).isNotEqualTo("current");
+            assertThat(item.path("mapUrl").asString()).startsWith("https://www.google.com/maps/");
+        }
+        // The fixture's "Hotel Example" price dates from 2021, so it is on the list with its listing's rank.
+        boolean listed = false;
+        for (JsonNode item : w.path("items")) {
+            listed |= item.path("title").asString().equals("Hotel Example") && item.path("fact").path("kind").asString().equals("price");
+        }
+        assertThat(listed).isTrue();
+        mvc.perform(get("/api/destinations/testville/recheck").param("perSection", "1")).andExpect(status().isOk());
+        mvc.perform(get("/api/destinations/no-such-place/recheck")).andExpect(status().isNotFound());
+    }
 }

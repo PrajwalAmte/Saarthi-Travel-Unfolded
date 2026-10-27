@@ -148,8 +148,10 @@ public class CoverageService {
                 Math.round(verifiedShare * 100) + "% of core items are community-verified ("
                         + Math.round(config.wellCoveredVerifiedShare() * 100) + "% required for well-covered)"));
 
+
+        long listings = base.entries().stream().filter(e -> !e.section().equals("neighbourhood")).count();
         String status;
-        if (totalItems == 0) {
+        if (totalItems == 0 || listings == 0) {
             status = "indexed";
         } else if (!hasSummary || sectionsMeetingMin < config.minCoreSectionsForUsable()) {
             status = "building";

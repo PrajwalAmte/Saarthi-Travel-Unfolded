@@ -191,6 +191,7 @@ describe("coverage and section states", () => {
     expect(screen.queryByText("Typical range")).not.toBeInTheDocument();
     expect(screen.getByText(/2 prices \(₹250 – ₹525\), sept 2022/)).toBeInTheDocument();
     expect(screen.getByText(/all need rechecking/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Help check its prices" })).toHaveAttribute("href", "/d/new-delhi/recheck");
   });
 
   it("shows a chain once with its other locations", () => {

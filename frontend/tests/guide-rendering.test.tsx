@@ -1,9 +1,11 @@
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { CoverageBadge } from "@/components/coverage-badge";
 import { BudgetTable } from "@/components/guide/budget-table";
 import { EntryCard } from "@/components/guide/entry-card";
 import { FactMeta } from "@/components/guide/fact-meta";
+import { InShort } from "@/components/guide/in-short";
 import { SectionList } from "@/components/guide/section-list";
 import type { SectionView } from "@/lib/types";
 import { axeViolations } from "./a11y";
@@ -213,5 +215,42 @@ describe("coverage and section states", () => {
     expect(screen.getByText("Also at 2 other locations")).toBeInTheDocument();
     expect(screen.getByText("South Kolkata · Park Circus")).toBeInTheDocument();
     expect(screen.getByText("North Kolkata · Shyambazar")).toBeInTheDocument();
+  });
+
+  it("shows an AI summary with the original one click away", async () => {
+    render(
+      <EntryCard
+        destinationId="d"
+        destinationSlug="kolkata"
+        entry={entry({
+          title: "Seacom Inn YMCA",
+          description: fact({ text: "An extremely drab and dark hotel that appears not to have received a lick of paint." }),
+          aiSummary: { text: "An old-fashioned hotel with a heritage café.", note: "Shortened by AI from English Wikivoyage, checked to add nothing new" },
+        })}
+      />,
+    );
+    expect(screen.getByText("An old-fashioned hotel with a heritage café.")).toBeVisible();
+    const toggle = screen.getByText(/Shortened by AI from English Wikivoyage.*Show original/);
+    expect(screen.getByText(/extremely drab/)).not.toBeVisible();
+    await userEvent.click(toggle);
+    expect(screen.getByText(/extremely drab/)).toBeVisible();
+  });
+
+  it("shows the original when there is no AI summary", () => {
+    render(<EntryCard destinationId="d" destinationSlug="x" entry={entry({ aiSummary: null })} />);
+    expect(screen.queryByText(/Show original/)).not.toBeInTheDocument();
+  });
+
+  it("lists In short sentences with the sources they rely on", () => {
+    render(
+      <InShort
+        items={[
+          { topic: "when_to_go", text: "Visit between October and March.", sources: [{ factId: "f", sourceName: "English Wikivoyage", url: "https://en.wikivoyage.org/w/index.php?oldid=1" }] },
+        ]}
+      />,
+    );
+    expect(screen.getByText("When to go")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "English Wikivoyage" })).toHaveAttribute("href", "https://en.wikivoyage.org/w/index.php?oldid=1");
+    expect(screen.getByText(/checked to add nothing/)).toBeInTheDocument();
   });
 });

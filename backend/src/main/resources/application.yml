@@ -92,6 +92,22 @@ app:
   public-url: ${APP_PUBLIC_URL:http://localhost:3000}
   admin-emails: ${APP_ADMIN_EMAILS:}
   contributor-licence: CC-BY-SA-4.0
+  ai:
+    # Optional AI review of ingested listings (Google Gemini). The model only flags doubtful listings for an admin;
+    # it never writes or changes guide content. Needs AI_REVIEW_ENABLED=true and GEMINI_KEY.
+    enabled: ${AI_REVIEW_ENABLED:false}
+    gemini-api-key: ${GEMINI_KEY:}
+    gemini-api-url: ${GEMINI_API_URL:https://generativelanguage.googleapis.com/v1beta}
+    model: ${GEMINI_MODEL:gemini-flash-lite-latest}
+    fallback-model: ${GEMINI_FALLBACK_MODEL:gemini-2.5-flash-lite}
+    # Stay inside the free tier: at most this many model requests per day (UTC), at most one every min-interval.
+    daily-request-budget: ${AI_DAILY_REQUEST_BUDGET:200}
+    min-interval: 4s
+    request-timeout: 90s
+    # Wait before retrying a busy model; tripled on each further attempt, then the fallback model is tried.
+    retry-base-delay: 5s
+    # Listings per request. Each answer carries a review, summary, tags and facts per listing, so keep it modest.
+    batch-size: 12
   notifications:
     # "Your guide is ready" emails. Turn off on any machine that shares the production database but is not the live site.
     enabled: ${REQUEST_NOTIFICATIONS_ENABLED:true}

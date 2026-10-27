@@ -63,7 +63,8 @@ public class DestinationService {
             OffsetDateTime lastSourceSyncAt,
             boolean guideAvailable,
             List<ChildDestination> childDestinations,
-            List<ClosedEntry> recentlyClosed) {}
+            List<ClosedEntry> recentlyClosed,
+            List<io.destinationintel.ai.AiContent.InShortItem> inShort) {}
 
     public record ListItem(String slug, String name, String kind, String description, String stateName,
                            String coverageStatus, String imageUrl, String imageCredit, Long entryCount) {}
@@ -82,15 +83,17 @@ public class DestinationService {
     private final GuideRepository guideRepo;
     private final JdbcClient jdbc;
     private final Json json;
+    private final io.destinationintel.ai.AiContent ai;
 
     public DestinationService(PlaceRepository places, CoverageService coverage, GuideService guide,
-                              GuideRepository guideRepo, JdbcClient jdbc, Json json) {
+                              GuideRepository guideRepo, JdbcClient jdbc, Json json, io.destinationintel.ai.AiContent ai) {
         this.places = places;
         this.coverage = coverage;
         this.guide = guide;
         this.guideRepo = guideRepo;
         this.jdbc = jdbc;
         this.json = json;
+        this.ai = ai;
     }
 
     public PageResponse<ListItem> list(String kind, boolean withGuide, int page, int size) {
@@ -181,7 +184,8 @@ public class DestinationService {
                 p.wikivoyageTitle() == null ? null
                         : "https://en.wikivoyage.org/wiki/" + URLEncoder.encode(p.wikivoyageTitle().replace(' ', '_'),
                         StandardCharsets.UTF_8).replace("%2F", "/"),
-                parents, aliases, image(p.id()), cov, summary, counts, sources, lastSync, guideAvailable, children, closed);
+                parents, aliases, image(p.id()), cov, summary, counts, sources, lastSync, guideAvailable, children, closed,
+                guideAvailable ? ai.inShort(p.id()) : List.of());
     }
 
     private ImageView image(UUID placeId) {

@@ -124,6 +124,14 @@ export type Entry = {
   score: number | null;
   reasons: Reason[];
   branches: Branch[];
+  /** A shorter version of the description, written by AI and checked to add nothing; null when not published. */
+  aiSummary?: { text: string; note: string } | null;
+};
+
+export type InShortItem = {
+  topic: "best_for" | "when_to_go" | "getting_around" | "good_to_know";
+  text: string;
+  sources: { factId: string; sourceName: string; url: string | null }[];
 };
 
 /** Another outlet of the same place (a chain), shown on the one card. */
@@ -254,6 +262,7 @@ export type DestinationDetail = {
   guideAvailable: boolean;
   childDestinations: { slug: string; name: string; kind: string; coverageStatus: CoverageStatus | null }[];
   recentlyClosed: { id: string; section: string; title: string; reason: string | null; reportedAt: string }[];
+  inShort?: InShortItem[];
 };
 
 export type FactDetail = {

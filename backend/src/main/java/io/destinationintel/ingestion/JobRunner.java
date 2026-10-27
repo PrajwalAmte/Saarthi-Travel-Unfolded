@@ -71,6 +71,9 @@ public class JobRunner {
             Map<String, Object> stats = handler.run(job);
             jobs.succeed(job.id(), stats);
             log.info("Finished {} job {} in {} ms: {}", job.jobType(), job.id(), System.currentTimeMillis() - started, stats);
+        } catch (JobHandler.Deferred e) {
+            log.info("{} job {} deferred for {}: {}", job.jobType(), job.id(), e.delay(), e.getMessage());
+            jobs.defer(job.id(), e.delay(), e.getMessage());
         } catch (JobHandler.PermanentFailure e) {
             log.warn("{} job {} failed permanently: {}", job.jobType(), job.id(), e.getMessage());
             jobs.fail(job.id(), e.getMessage(), false);

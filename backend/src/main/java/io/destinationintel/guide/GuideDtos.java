@@ -72,7 +72,11 @@ public final class GuideDtos {
             String mapUrl,
             Double score,
             List<Reason> reasons,
-            List<Branch> branches) {}
+            List<Branch> branches,
+            AiSummary aiSummary) {}
+
+    /** A shorter, plainer version of the description, checked to add nothing; the original stays available. */
+    public record AiSummary(String text, String note) {}
 
     /** One price or opening-hours fact worth a contributor's eyes, in the order travellers meet it. */
     public record RecheckItem(String section, int rank, UUID entryId, String title, String area, String mapUrl,

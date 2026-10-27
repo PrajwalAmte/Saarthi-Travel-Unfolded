@@ -101,6 +101,9 @@ public class WikivoyageQualityEvaluator implements SourceQualityEvaluator {
         m.put("placesShownWithSeveralBranches", chainPlaces);
         m.put("textArtifacts", artifacts);
         m.put("misfiledLandmarks", misfiled);
+        m.put("aiOpenFlags", count("""
+                SELECT count(*) FROM ai_review r JOIN guide_entry e ON e.id = r.entry_id
+                WHERE r.status = 'open' AND e.ingest_key LIKE 'wv:%'"""));
         long sameNameElsewhere = count("""
                 SELECT count(*) FROM (SELECT destination_id, title_normalized FROM guide_entry WHERE status = 'published'
                     AND section <> 'neighbourhood' GROUP BY 1, 2 HAVING count(*) > 1) x""");

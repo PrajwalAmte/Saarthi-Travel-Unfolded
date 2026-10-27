@@ -76,7 +76,9 @@ public final class WikiText {
     }
 
     static Template parseTemplate(String inner, int start, int end) {
-        List<String> parts = splitTopLevel(inner);
+        // Editors comment out parameters inside templates ("<!-- | regionmap=... -->"); a "|" in a comment must not
+        // split the template, or its name becomes "regionlist <!--" and the whole template is missed.
+        List<String> parts = splitTopLevel(COMMENT.matcher(inner).replaceAll(""));
         String name = parts.isEmpty() ? "" : parts.get(0).trim().replace('_', ' ').toLowerCase(Locale.ROOT);
         Map<String, String> params = new LinkedHashMap<>();
         List<String> positional = new ArrayList<>();

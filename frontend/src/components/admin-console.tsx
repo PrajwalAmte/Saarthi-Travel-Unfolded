@@ -5,6 +5,7 @@ import * as React from "react";
 import { api, problemMessage } from "@/lib/client-api";
 import type { IngestionStatus, JobView, Page } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
+import { AiReviewPanel } from "./ai-review-panel";
 import { useSession } from "./session-provider";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -271,6 +272,8 @@ export function AdminConsole() {
           </ul>
         ) : null}
       </section>
+
+      <AiReviewPanel />
 
       <section className="space-y-3">
         <h2 className="text-2xl font-semibold">Uncertain place matches</h2>

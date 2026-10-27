@@ -17,7 +17,8 @@ import java.util.regex.Pattern;
 public final class WikivoyageArticleParser {
 
     /** Bump when parsing rules change so unchanged revisions are re-processed. */
-    public static final int VERSION = 4;
+    /** Bump when parsing changes; guides read by an older version are re-read by the refresh planner. */
+    public static final int VERSION = 5;
 
     public static final Set<String> LISTING_TEMPLATES = Set.of("see", "do", "buy", "eat", "drink", "sleep", "go", "listing");
 

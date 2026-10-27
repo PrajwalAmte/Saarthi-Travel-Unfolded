@@ -250,7 +250,7 @@ public class GuideService {
                 }
             }
         }
-        return new Candidate(e.id(), e.title(), e.section(), e.subsection(), e.area(), attributes(e), e.distanceKm(),
+        return new Candidate(e.id(), e.title(), e.section(), e.subsection(), e.area(), attributes(e, base), e.distanceKm(),
                 e.latitude() != null && e.longitude() != null, detail, sources.size(),
                 freshness.recencyFactor(basisVolatility, basis), basis, confirmations, denials, lastConfirmation,
                 description != null);
@@ -258,6 +258,19 @@ public class GuideService {
 
     EntryAttributes attributes(EntryRow e) {
         return EntryAttributes.fromMap(json.map(e.attributes()));
+    }
+
+    /** Source-derived attributes plus, when published, tags the AI found in the listing's own words. */
+    EntryAttributes attributes(EntryRow e, GuideBase base) {
+        return io.destinationintel.ai.AiContent.merge(attributes(e), base.aiFor(e.id()));
+    }
+
+    private static GuideDtos.AiSummary aiSummary(io.destinationintel.ai.AiContent.EntryEnrichment ai, FactView description) {
+        if (ai == null || ai.summary() == null || description == null) {
+            return null;
+        }
+        String source = description.evidence().isEmpty() ? "the source" : description.evidence().get(0).sourceName();
+        return new GuideDtos.AiSummary(ai.summary(), "Shortened by AI from " + source + ", checked to add nothing new");
     }
 
     public EntryView entryView(PlaceRow destination, EntryRow e, GuideBase base, Ranked ranked) {
@@ -274,9 +287,9 @@ public class GuideService {
         }
         details.sort(Comparator.comparingInt(v -> detailOrder(v.kind())));
         return new EntryView(e.id(), e.section(), e.subsection(), e.area(), e.title(), e.altTitle(), e.latitude(),
-                e.longitude(), e.distanceKm(), e.origin(), labels(e, attributes(e)), description, details,
+                e.longitude(), e.distanceKm(), e.origin(), labels(e, attributes(e, base)), description, details,
                 mapUrl(destination, e), ranked == null ? null : ranked.score(),
-                ranked == null ? List.of() : ranked.reasons(), List.of());
+                ranked == null ? List.of() : ranked.reasons(), List.of(), aiSummary(base.aiFor(e.id()), description));
     }
 
     private EntryView withBranches(PlaceRow destination, EntryView lead, List<Ranked> others, Map<UUID, EntryRow> byId,
@@ -292,7 +305,7 @@ public class GuideService {
         }
         return new EntryView(lead.id(), lead.section(), lead.subsection(), lead.area(), lead.title(), lead.altTitle(),
                 lead.latitude(), lead.longitude(), lead.distanceKm(), lead.origin(), lead.labels(), lead.description(),
-                lead.details(), lead.mapUrl(), lead.score(), lead.reasons(), branches);
+                lead.details(), lead.mapUrl(), lead.score(), lead.reasons(), branches, lead.aiSummary());
     }
 
     private static int detailOrder(String kind) {

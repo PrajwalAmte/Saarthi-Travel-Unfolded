@@ -38,4 +38,19 @@ class ExpansionIT extends IntegrationTest {
                 .query(String.class).list();
         assertThat(queued).containsExactly("Otherville", "Testville");
     }
+
+    @Test
+    void guidesReadByAnOlderParserAreReadAgain() {
+        UUID city = seedTestvillePlace();
+        ingestGuide(city);
+        jdbc.sql("DELETE FROM ingestion_job").update();
+        scheduler.planRefreshes("scheduler");
+        assertThat(jdbc.sql("SELECT count(*) FROM ingestion_job WHERE job_type = 'wikivoyage_guide' AND target_place_id = :p")
+                .param("p", city).query(Long.class).single()).as("fresh and current: nothing to do").isZero();
+
+        jdbc.sql("UPDATE place_source_sync SET parser_version = parser_version - 1 WHERE place_id = :p").param("p", city).update();
+        scheduler.planRefreshes("scheduler");
+        assertThat(jdbc.sql("SELECT count(*) FROM ingestion_job WHERE job_type = 'wikivoyage_guide' AND target_place_id = :p")
+                .param("p", city).query(Long.class).single()).isEqualTo(1);
+    }
 }

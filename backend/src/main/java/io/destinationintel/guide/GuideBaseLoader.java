@@ -25,7 +25,17 @@ public class GuideBaseLoader {
             List<EntryRow> entries,
             Map<UUID, List<FactRow>> factsByEntry,
             List<FactRow> destinationFacts,
-            Map<UUID, List<EvidenceRow>> evidenceByFact) {
+            Map<UUID, List<EvidenceRow>> evidenceByFact,
+            Map<UUID, io.destinationintel.ai.AiContent.EntryEnrichment> ai) {
+
+        public GuideBase(UUID destinationId, List<EntryRow> entries, Map<UUID, List<FactRow>> factsByEntry,
+                         List<FactRow> destinationFacts, Map<UUID, List<EvidenceRow>> evidenceByFact) {
+            this(destinationId, entries, factsByEntry, destinationFacts, evidenceByFact, Map.of());
+        }
+
+        public io.destinationintel.ai.AiContent.EntryEnrichment aiFor(UUID entryId) {
+            return ai.get(entryId);
+        }
 
         public List<FactRow> factsFor(UUID entryId) {
             return factsByEntry.getOrDefault(entryId, List.of());
@@ -40,10 +50,12 @@ public class GuideBaseLoader {
 
     private final GuideRepository repo;
     private final CacheManager cacheManager;
+    private final io.destinationintel.ai.AiContent ai;
 
-    public GuideBaseLoader(GuideRepository repo, CacheManager cacheManager) {
+    public GuideBaseLoader(GuideRepository repo, CacheManager cacheManager, io.destinationintel.ai.AiContent ai) {
         this.repo = repo;
         this.cacheManager = cacheManager;
+        this.ai = ai;
     }
 
     @Cacheable(cacheNames = CACHE, key = "#destinationId")
@@ -63,7 +75,7 @@ public class GuideBaseLoader {
             evidence.computeIfAbsent(e.factId(), k -> new ArrayList<>()).add(e);
         }
         return new GuideBase(destinationId, List.copyOf(entries), Map.copyOf(byEntry), List.copyOf(destinationFacts),
-                Map.copyOf(evidence));
+                Map.copyOf(evidence), Map.copyOf(ai.forDestination(destinationId)));
     }
 
     public void evict(UUID destinationId) {

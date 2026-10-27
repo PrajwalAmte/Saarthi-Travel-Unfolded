@@ -118,14 +118,23 @@ export function EntryCard({ entry, destinationId, destinationSlug, rank }: { ent
         </ul>
       ) : null}
 
-      {entry.description ? (
+      {entry.description && entry.aiSummary ? (
+        <div className="mt-3">
+          <p className="leading-relaxed text-ink-2">{entry.aiSummary.text}</p>
+          <details className="group mt-1 text-sm">
+            <summary className="cursor-pointer select-none text-muted hover:text-ink">
+              {entry.aiSummary.note}. Show original
+            </summary>
+            <p className="mt-2 whitespace-pre-line leading-relaxed text-ink-2">{entry.description.text}</p>
+            <FactMeta fact={entry.description} destinationId={destinationId} />
+          </details>
+        </div>
+      ) : entry.description ? (
         <div className="mt-3">
           <p className="whitespace-pre-line leading-relaxed text-ink-2">{entry.description.text}</p>
           <FactMeta fact={entry.description} destinationId={destinationId} />
         </div>
-      ) : (
-        null
-      )}
+      ) : null}
 
       {entry.details.length ? (
         <div className="mt-3 rounded-md bg-sunken/70 px-3 py-1.5 text-sm">

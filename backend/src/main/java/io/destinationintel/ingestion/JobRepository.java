@@ -142,6 +142,16 @@ public class JobRepository {
                 .param("id", id).update();
     }
 
+    /** Puts a job back in the queue for later without spending one of its attempts. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void defer(UUID id, Duration delay, String reason) {
+        jdbc.sql("""
+                        UPDATE ingestion_job SET status = 'queued', attempts = greatest(attempts - 1, 0), started_at = NULL,
+                               next_attempt_at = now() + make_interval(secs => :secs), last_error = :reason
+                        WHERE id = :id""")
+                .param("secs", Math.max(60, delay.toSeconds())).param("reason", reason).param("id", id).update();
+    }
+
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void heartbeat(UUID id) {
         jdbc.sql("UPDATE ingestion_job SET heartbeat_at = now() WHERE id = :id AND status = 'running'")

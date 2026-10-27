@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { CoverageBadge } from "@/components/coverage-badge";
 import { ClimateChart } from "@/components/guide/climate-chart";
 import { FactMeta } from "@/components/guide/fact-meta";
+import { InShort } from "@/components/guide/in-short";
 import { MappedPlaces } from "@/components/guide/mapped-places";
 import { StatusPill } from "@/components/guide/fact-status";
 import { PreferenceBar } from "@/components/guide/preference-bar";
@@ -95,6 +96,11 @@ export default async function OverviewPage({ params, searchParams }: Props) {
           ) : (
             <p className="mt-3 text-muted">No summary has been published yet.</p>
           )}
+          {d.inShort?.length ? (
+            <div className="mt-6">
+              <InShort items={d.inShort} />
+            </div>
+          ) : null}
         </section>
         {tips?.climate ? (
           <aside>

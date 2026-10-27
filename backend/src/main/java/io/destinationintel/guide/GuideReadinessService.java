@@ -101,6 +101,14 @@ public class GuideReadinessService {
         checks.add(new Check("budget", mealsOk && staysOk,
                 (mealsOk ? "Food" : "Food: not enough recent prices") + "; " + (staysOk ? "Stays" : "Stays: not enough recent prices")));
 
+        long openFlags = count("SELECT count(*) FROM ai_review WHERE destination_id = :d AND status = 'open'", id);
+        long aiReviewed = count("""
+                SELECT count(DISTINCT r.entry_id) FROM ai_review r JOIN guide_entry e ON e.id = r.entry_id
+                WHERE r.destination_id = :d AND e.status = 'published'""", id);
+        checks.add(new Check("ai_flags_resolved", openFlags == 0,
+                openFlags > 0 ? openFlags + " listings flagged by the AI reviewer wait for an admin decision"
+                        : aiReviewed == 0 ? "Not reviewed by the AI reviewer yet" : aiReviewed + " listings reviewed, no open flags"));
+
         boolean ready = checks.stream().allMatch(Check::passed);
         long confirmed = count("SELECT count(*) FROM fact WHERE destination_id = :d AND status = 'published' AND last_verified_at IS NOT NULL", id);
         boolean verified = ready && confirmed >= MIN_CONFIRMED_FACTS;

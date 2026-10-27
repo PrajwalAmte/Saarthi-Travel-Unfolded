@@ -68,13 +68,17 @@ public class WikivoyageGuideHandler implements JobHandler {
     private final AppProperties props;
     private final io.destinationintel.ingestion.run.SyncRunRecorder recorder;
     private final io.destinationintel.quality.QualityService quality;
+    private final io.destinationintel.ai.AiProperties ai;
+    /** AI review runs after the cheap follow-ups and the bulk imports, but before routine refreshes. */
+    static final int AI_REVIEW_PRIORITY = 4;
 
     public WikivoyageGuideHandler(WikivoyageClient client, WikidataClient wikidata, PlaceRepository places,
                                   GuideWriter writer, SourceRepository sources, CoverageService coverage,
                                   JobRepository jobs, TransactionTemplate tx, JdbcClient jdbc, Json json,
                                   AuditService audit, AppProperties props,
                                   io.destinationintel.ingestion.run.SyncRunRecorder recorder,
-                                  io.destinationintel.quality.QualityService quality) {
+                                  io.destinationintel.quality.QualityService quality,
+                                  io.destinationintel.ai.AiProperties ai) {
         this.client = client;
         this.wikidata = wikidata;
         this.places = places;
@@ -89,6 +93,7 @@ public class WikivoyageGuideHandler implements JobHandler {
         this.props = props;
         this.recorder = recorder;
         this.quality = quality;
+        this.ai = ai;
     }
 
     @Override
@@ -199,6 +204,10 @@ public class WikivoyageGuideHandler implements JobHandler {
             // Make sure supporting data exists for a destination that now has guide content.
             jobs.enqueue("climate", "open-meteo", place.id(), Map.of(), "climate:" + place.id(), FOLLOW_UP_PRIORITY - 1, "system");
             jobs.enqueue("place_image", "wikimedia-commons", place.id(), Map.of(), "place_image:" + place.id(), FOLLOW_UP_PRIORITY, "system");
+            if (ai.active()) {
+                // Listings whose text is unchanged are skipped by the review, so this costs nothing on a no-op refresh.
+                jobs.enqueue("ai_review", null, place.id(), Map.of(), "ai_review:" + place.id(), AI_REVIEW_PRIORITY, "system");
+            }
             return stats;
         } catch (RuntimeException e) {
             recorder.fail(run, e.getMessage());

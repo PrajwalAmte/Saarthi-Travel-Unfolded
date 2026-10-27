@@ -166,4 +166,23 @@ class RequestIT extends IntegrationTest {
         assertThat(jdbc.sql("SELECT email IS NULL FROM request_notification").query(Boolean.class).single()).isTrue();
         assertThat(mail.sent).isEmpty();
     }
+
+    @Test
+    void aThinGuideStillCompletesTheRequestAndSaysHonestlyWhatItHas() throws Exception {
+        seedTestvillePlace();
+        String code = request("{\"query\":\"Testpura\",\"email\":\"starter@test.example\"}").path("trackingCode").asString();
+        runner.execute(jobs.claimNext().orElseThrow());
+        // Everything the source has is in, but not enough for a full guide.
+        jdbc.sql("UPDATE destination_profile SET coverage_status = 'building'").update();
+
+        JsonNode view = body(mvc.perform(get("/api/requests/" + code)).andReturn());
+        assertThat(view.path("status").asString()).isEqualTo("building");
+        assertThat(view.path("statusLabel").asString()).isEqualTo("Starter guide ready");
+        assertThat(view.path("statusDetail").asString()).contains("places so far").contains("can add the places it is missing")
+                .doesNotContain("quality bar");
+
+        assertThat(notifications.deliverDue()).as("the reader is not left waiting for content that is not coming").isEqualTo(1);
+        assertThat(mail.sent.get(0).getSubject()).isEqualTo("A starter guide for Testville is ready");
+        assertThat(mail.sent.get(0).getText()).contains("/d/testville").contains("/contribute/testville").contains("starter guide");
+    }
 }

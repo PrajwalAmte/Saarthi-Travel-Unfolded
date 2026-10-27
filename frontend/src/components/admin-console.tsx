@@ -105,7 +105,7 @@ export function AdminConsole() {
       <section className="space-y-4">
         <h2 className="text-2xl font-semibold">Queue a job</h2>
         <form
-          className="grid gap-3 rounded-lg border border-line bg-surface p-4 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end"
+          className="space-y-4 rounded-lg border border-line bg-surface p-4"
           onSubmit={(e) => {
             e.preventDefault();
             const f = new FormData(e.currentTarget);
@@ -124,29 +124,33 @@ export function AdminConsole() {
             );
           }}
         >
-          <Field label="Job" htmlFor="job-type">
-            <Select id="job-type" name="type" defaultValue="wikivoyage_guide">
-              <option value="wikivoyage_guide">Ingest Wikivoyage guide</option>
-              <option value="climate">Climate averages</option>
-              <option value="place_image">Destination image</option>
-              <option value="wikidata_index">Nationwide Wikidata index</option>
-              <option value="osm_extract">OpenStreetMap India extract</option>
-              <option value="overture_places">Overture places release</option>
-              <option value="heritage_monuments">ASI-numbered monuments</option>
-              <option value="quality_evaluation">Re-evaluate a source&apos;s quality</option>
-              <option value="coverage_refresh">Recompute coverage</option>
-            </Select>
-          </Field>
-          <Field label="Destination slug" htmlFor="job-slug" hint="e.g. mysore (not needed for the index)">
-            <Input id="job-slug" name="slug" />
-          </Field>
-          <Field label="Source id" htmlFor="job-source" hint="only for quality evaluation, e.g. overture-places">
-            <Input id="job-source" name="sourceId" />
-          </Field>
-          <label className="flex items-center gap-2 pb-2 text-sm">
-            <input type="checkbox" name="force" /> Force
-          </label>
-          <Button type="submit">Queue</Button>
+          <div className="grid gap-3 sm:grid-cols-3 sm:items-start">
+            <Field label="Job" htmlFor="job-type">
+              <Select id="job-type" name="type" defaultValue="wikivoyage_guide">
+                <option value="wikivoyage_guide">Ingest Wikivoyage guide</option>
+                <option value="climate">Climate averages</option>
+                <option value="place_image">Destination image</option>
+                <option value="wikidata_index">Nationwide Wikidata index</option>
+                <option value="osm_extract">OpenStreetMap India extract</option>
+                <option value="overture_places">Overture places release</option>
+                <option value="heritage_monuments">ASI-numbered monuments</option>
+                <option value="quality_evaluation">Re-evaluate a source&apos;s quality</option>
+                <option value="coverage_refresh">Recompute coverage</option>
+              </Select>
+            </Field>
+            <Field label="Destination slug" htmlFor="job-slug" hint="e.g. mysore (not needed for the index)">
+              <Input id="job-slug" name="slug" />
+            </Field>
+            <Field label="Source id" htmlFor="job-source" hint="only for quality evaluation, e.g. overture-places">
+              <Input id="job-source" name="sourceId" />
+            </Field>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+            <Button type="submit">Queue</Button>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" name="force" /> Force <span className="text-muted">(re-import even if the source is unchanged)</span>
+            </label>
+          </div>
         </form>
         <Button variant="outline" onClick={() => void act(() => api("/api/admin/ingestion/plan", { method: "POST" }), "Planner ran.")}>
           Run the refresh planner now

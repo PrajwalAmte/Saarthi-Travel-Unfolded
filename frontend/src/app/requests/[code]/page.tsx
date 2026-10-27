@@ -24,15 +24,15 @@ function stepIndex(r: RequestView): number {
     case "processing":
     case "indexed_no_guide":
       return 1;
+    // A starter guide is finished work: everything the open sources have is in.
     case "building":
-      return 2;
     case "published":
       return 3;
   }
 }
 
 const WAITING: RequestView["status"][] = ["received", "queued", "processing"];
-const CAN_NOTIFY: RequestView["status"][] = ["received", "queued", "processing", "building", "indexed_no_guide", "needs_review"];
+const CAN_NOTIFY: RequestView["status"][] = ["received", "queued", "processing", "indexed_no_guide", "needs_review"];
 
 export default async function RequestStatusPage({
   params,
@@ -47,7 +47,7 @@ export default async function RequestStatusPage({
   const r = await apiGetOrNull<RequestView>(`/api/requests/${code}`);
   if (!r) notFound();
   const step = stepIndex(r);
-  const tone = r.status === "published" ? "success" : r.status === "unresolvable" ? "error" : r.status === "needs_review" ? "warning" : "info";
+  const tone = r.status === "published" || r.status === "building" ? "success" : r.status === "unresolvable" ? "error" : r.status === "needs_review" ? "warning" : "info";
   return (
     <div className="container-page max-w-2xl py-10">
       <p className="text-sm text-muted">Destination request</p>
@@ -90,7 +90,19 @@ export default async function RequestStatusPage({
         <NotifyMe code={r.trackingCode} alreadySubscribed={emailed} noGuideYet={r.status === "indexed_no_guide"} />
       ) : null}
 
-      <AutoRefresh active={WAITING.includes(r.status) || r.status === "building"} />
+      <AutoRefresh active={WAITING.includes(r.status)} />
+
+      {r.status === "building" && r.destination ? (
+        <p className="mt-4 text-sm">
+          <Link href={`/d/${r.destination.slug}`} className="text-accent underline">
+            Open the starter guide
+          </Link>
+          {" · "}
+          <Link href={`/contribute/${r.destination.slug}`} className="text-accent underline">
+            Know {r.destination.name}? Add a place
+          </Link>
+        </p>
+      ) : null}
 
       {r.destination ? (
         <div className="mt-6 flex flex-wrap items-center gap-3 rounded-lg border border-line bg-surface p-4">

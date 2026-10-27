@@ -28,7 +28,7 @@ public class RequestNotifications {
     static final int RETENTION_DAYS = 90;
 
     private record Due(UUID id, String email, String trackingCode, String queryText, String requestStatus,
-                       String placeName, String placeSlug, int attempts) {}
+                       String placeName, String placeSlug, String coverage, int attempts) {}
 
     private final JdbcClient jdbc;
     private final MailService mail;
@@ -85,14 +85,14 @@ public class RequestNotifications {
                 .param("d", RETENTION_DAYS).update();
         List<Due> due = jdbc.sql("""
                         SELECT n.id, n.email, r.tracking_code, r.query_text, r.status AS request_status,
-                               p.name AS place_name, p.slug AS place_slug, n.attempts
+                               p.name AS place_name, p.slug AS place_slug, dp.coverage_status AS coverage, n.attempts
                         FROM request_notification n
                         JOIN destination_request r ON r.id = n.request_id
                         LEFT JOIN destination_profile dp ON dp.place_id = r.resolved_place_id
                         LEFT JOIN place p ON p.id = r.resolved_place_id
                         WHERE n.email IS NOT NULL AND n.next_attempt_at <= now()
                           AND (r.status = 'unresolvable'
-                               OR (dp.coverage_status IS NOT NULL AND dp.coverage_status NOT IN ('indexed', 'building')))
+                               OR (dp.coverage_status IS NOT NULL AND dp.coverage_status <> 'indexed'))
                         ORDER BY n.created_at LIMIT 20
                         FOR UPDATE OF n SKIP LOCKED""")
                 .query(Due.class).list();
@@ -128,7 +128,11 @@ public class RequestNotifications {
     }
 
     private String subject(Due d, boolean notFound) {
-        return notFound ? "We could not find “" + d.queryText() + "” on Saarthi" : "Your guide for " + d.placeName() + " is ready";
+        if (notFound) {
+            return "We could not find “" + d.queryText() + "” on Saarthi";
+        }
+        return "building".equals(d.coverage()) ? "A starter guide for " + d.placeName() + " is ready"
+                : "Your guide for " + d.placeName() + " is ready";
     }
 
     private String body(Due d, boolean notFound) {
@@ -140,6 +144,12 @@ public class RequestNotifications {
                     + "Check the spelling, or request it again with the state added to narrow it down:\n\n"
                     + base + "/request?q=" + java.net.URLEncoder.encode(d.queryText(), java.nio.charset.StandardCharsets.UTF_8)
                     + footer;
+        }
+        if ("building".equals(d.coverage())) {
+            return "Hello,\n\nWe imported everything open travel guides have on " + d.placeName() + ". There is not much yet, "
+                    + "so it is a starter guide: a place to begin, not a complete guide.\n\n" + base + "/d/" + d.placeSlug()
+                    + "\n\nIf you know " + d.placeName() + ", you can add the places it is missing:\n" + base + "/contribute/"
+                    + d.placeSlug() + footer;
         }
         return "Hello,\n\nThe guide you asked for is ready: " + d.placeName() + ".\n\n" + base + "/d/" + d.placeSlug()
                 + "\n\nIt is built from open sources, and every tip shows where it came from. "

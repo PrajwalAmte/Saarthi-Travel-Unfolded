@@ -200,7 +200,7 @@ public class RequestService {
         String coverage = coverageStatus(place.id());
         if (coverage != null && !coverage.equals("indexed")) {
             status = coverage.equals("building") ? "building" : "published";
-            detail = coverage.equals("building") ? "A guide exists but is still being built." : "A guide is available.";
+            detail = coverage.equals("building") ? starterDetail(place) : "A guide is available.";
         } else if (place.wikivoyageTitle() != null) {
             job = jobs.enqueue("wikivoyage_guide", "wikivoyage-en", place.id(), Map.of(), "wikivoyage_guide:" + place.id(), GUIDE_PRIORITY, "request");
             status = "processing";
@@ -274,9 +274,7 @@ public class RequestService {
                 dest = new DestinationRef(p.slug(), p.name(), p.kind(), coverage == null ? "indexed" : coverage);
                 if (coverage != null && !coverage.equals("indexed")) {
                     status = coverage.equals("building") ? "building" : "published";
-                    detail = coverage.equals("building")
-                            ? "Guide content was ingested, but it does not yet meet the quality bar for a usable guide."
-                            : "A guide is available.";
+                    detail = coverage.equals("building") ? starterDetail(p) : "A guide is available.";
                 } else if ("failed".equals(jobStatus)) {
                     status = "needs_review";
                     detail = "Ingestion did not complete. The maintainers can see the error and retry it.";
@@ -347,6 +345,39 @@ public class RequestService {
         return ids.size() == 1 ? places.findById(ids.get(0)) : Optional.empty();
     }
 
+    /**
+     * A request is finished once everything the open sources have is imported, even when that is little. Say what the
+     * guide has, honestly, instead of leaving the reader waiting for content that is not coming.
+     */
+    String starterDetail(PlaceRow place) {
+        return "We imported everything open travel guides have on " + place.name() + ": " + guideSize(place.id())
+                + ". It is a starter guide, so treat it as a starting point. People who know " + place.name()
+                + " can add the places it is missing.";
+    }
+
+    /** "7 places so far: 5 to see and do, 1 to eat, none to stay", counting places, not branches. */
+    String guideSize(UUID placeId) {
+        Map<String, Object> c = jdbc.sql("""
+                        SELECT count(DISTINCT (section, title_normalized)) FILTER (WHERE section IN ('see', 'do', 'buy')) AS explore,
+                               count(DISTINCT (section, title_normalized)) FILTER (WHERE section IN ('eat', 'drink')) AS eat,
+                               count(DISTINCT (section, title_normalized)) FILTER (WHERE section = 'stay') AS stay
+                        FROM guide_entry WHERE destination_id = :p AND status = 'published'""")
+                .param("p", placeId).query().singleRow();
+        long explore = ((Number) c.get("explore")).longValue();
+        long eat = ((Number) c.get("eat")).longValue();
+        long stay = ((Number) c.get("stay")).longValue();
+        long total = explore + eat + stay;
+        if (total == 0) {
+            return "a summary and travel basics, but no places to list yet";
+        }
+        return total + (total == 1 ? " place" : " places") + " so far (" + count(explore, "to see and do") + ", "
+                + count(eat, "to eat and drink") + ", " + count(stay, "to stay") + ")";
+    }
+
+    private static String count(long n, String what) {
+        return (n == 0 ? "none" : String.valueOf(n)) + " " + what;
+    }
+
     private String coverageStatus(UUID placeId) {
         return jdbc.sql("SELECT coverage_status FROM destination_profile WHERE place_id = :p").param("p", placeId)
                 .query(String.class).optional().orElse(null);
@@ -364,7 +395,7 @@ public class RequestService {
             case "received", "queued" -> "Received";
             case "processing" -> "Being ingested";
             case "indexed_no_guide" -> "Indexed, no guide yet";
-            case "building" -> "Guide being built";
+            case "building" -> "Starter guide ready";
             case "published" -> "Guide available";
             case "needs_review" -> "Needs a decision";
             case "unresolvable" -> "Place not found";

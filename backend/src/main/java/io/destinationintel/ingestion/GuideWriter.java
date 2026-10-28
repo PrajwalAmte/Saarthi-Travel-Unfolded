@@ -89,7 +89,8 @@ public class GuideWriter {
                         VALUES (:dest, :section, :subsection, :area, :title, :alt, :lat, :lon, :qid, :sitelinks,
                                 CAST(:attrs AS jsonb), 'published', 'ingested', :key, :seen)
                         ON CONFLICT (ingest_key) DO UPDATE SET
-                            section = EXCLUDED.section,
+                            -- a section an admin moved the listing to wins over the source's filing
+                            section = coalesce(guide_entry.section_override, EXCLUDED.section),
                             subsection = EXCLUDED.subsection,
                             area = EXCLUDED.area,
                             title = EXCLUDED.title,
@@ -151,7 +152,8 @@ public class GuideWriter {
                                                       WHEN observed_at IS NULL OR CAST(:observed AS date) > observed_at
                                                       THEN CAST(:observed AS date) ELSE observed_at END,
                                    observed_basis = CASE WHEN CAST(:observed AS date) IS NULL THEN observed_basis ELSE :basis END,
-                                   heading = :heading, section = :section,
+                                   heading = :heading,
+                                   section = coalesce((SELECT e.section_override FROM guide_entry e WHERE e.id = fact.entry_id), :section),
                                    status = CASE WHEN status = 'hidden' THEN 'published' ELSE status END,
                                    updated_at = now()
                             WHERE id = :id
@@ -178,7 +180,8 @@ public class GuideWriter {
                         INSERT INTO fact (destination_id, entry_id, section, kind, heading, value_text, value_json, volatility,
                                           status, origin, ingest_key, observed_at, observed_basis, source_refreshed_at,
                                           supersedes_fact_id)
-                        VALUES (:dest, :entry, :section, :kind, :heading, :text, CAST(:json AS jsonb), :volatility,
+                        VALUES (:dest, :entry, coalesce((SELECT e.section_override FROM guide_entry e WHERE e.id = :entry), :section),
+                                :kind, :heading, :text, CAST(:json AS jsonb), :volatility,
                                 'published', 'ingested', :key, :observed, :basis, :fetched, :supersedes)
                         RETURNING id
                         """)

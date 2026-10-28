@@ -34,7 +34,7 @@ public class AiReviewController {
                        String suggestedSection, double confidence, String reason, String model, OffsetDateTime createdAt) {}
 
     public record Usage(boolean active, String model, String fallbackModel, int requestsToday, int dailyBudget, long tokensToday,
-                        long openFlags, long reviewedListings, long queuedJobs) {}
+                        long openFlags, long reviewedListings, long queuedJobs, long decidedAutomatically) {}
 
     private final JdbcClient jdbc;
     private final CurrentUser current;
@@ -45,6 +45,8 @@ public class AiReviewController {
     private final AiProperties props;
     private final AiPublishing publishing;
     private final tools.jackson.databind.json.JsonMapper mapper;
+    private final ListingFixes fixes;
+    private final FlagDecider decider;
 
     public record PreviewEntry(UUID entryId, String section, String title, String area, String original, String summary,
                                String summaryStatus, String summaryRejection, Object tags, Object extracted) {}
@@ -55,7 +57,7 @@ public class AiReviewController {
 
     public AiReviewController(JdbcClient jdbc, CurrentUser current, AuditService audit, GuideChanges changes, JobRepository jobs,
                               PlaceRepository places, AiProperties props, AiPublishing publishing,
-                              tools.jackson.databind.json.JsonMapper mapper) {
+                              tools.jackson.databind.json.JsonMapper mapper, ListingFixes fixes, FlagDecider decider) {
         this.jdbc = jdbc;
         this.current = current;
         this.audit = audit;
@@ -65,6 +67,8 @@ public class AiReviewController {
         this.props = props;
         this.publishing = publishing;
         this.mapper = mapper;
+        this.fixes = fixes;
+        this.decider = decider;
     }
 
     @GetMapping("/publish")
@@ -123,7 +127,8 @@ public class AiReviewController {
                 u.get("tokens") instanceof Number t ? t.longValue() : 0,
                 count("SELECT count(*) FROM ai_review WHERE status = 'open'"),
                 count("SELECT count(DISTINCT entry_id) FROM ai_review"),
-                count("SELECT count(*) FROM ingestion_job WHERE job_type = 'ai_review' AND status IN ('queued', 'running')"));
+                count("SELECT count(*) FROM ingestion_job WHERE job_type = 'ai_review' AND status IN ('queued', 'running')"),
+                count("SELECT count(*) FROM ai_review WHERE decided_automatically"));
     }
 
     @GetMapping("/flags")
@@ -155,31 +160,76 @@ public class AiReviewController {
     }
 
     @PostMapping("/flags/{id}/accept")
-    @Transactional
     @Operation(summary = "Agree with the flag: the listing is hidden from the guide, with the reason recorded")
     public Map<String, Object> accept(@PathVariable UUID id) {
-        UUID admin = current.require().id();
-        Map<String, Object> f = open(id);
-        UUID entry = (UUID) f.get("entry_id");
-        jdbc.sql("""
-                        UPDATE guide_entry SET status = 'hidden', status_reason = :reason, updated_at = now()
-                        WHERE id = :e AND status = 'published'""")
-                .param("reason", "Hidden after review: " + f.get("reason")).param("e", entry).update();
-        resolve(id, "accepted", admin);
-        audit.record(admin, "ai_flag.accepted", "guide_entry", entry, (UUID) f.get("destination_id"), Map.of("flag", id.toString()));
-        changes.destinationChanged((UUID) f.get("destination_id"));
-        return Map.of("status", "accepted", "message", "The listing is hidden from the guide.");
+        requireOpen(id);
+        fixes.hide(id, current.require().id(), false);
+        return Map.of("status", "hidden", "message", "The listing is hidden from the guide.");
     }
 
+    @PostMapping("/flags/{id}/move")
+    @Operation(summary = "Move the listing to the section where it belongs (by default the one the reviewer suggests)")
+    public Map<String, Object> move(@PathVariable UUID id,
+                                    @org.springframework.web.bind.annotation.RequestBody(required = false) Map<String, String> body) {
+        requireOpen(id);
+        String to = body != null && body.get("section") != null ? body.get("section")
+                : jdbc.sql("SELECT suggested_section FROM ai_review WHERE id = :id").param("id", id).query(String.class).optional().orElse(null);
+        fixes.move(id, to == null ? "" : to, current.require().id(), false);
+        return Map.of("status", "moved", "message", "Moved to " + SECTION_NAMES.getOrDefault(to, to) + ".");
+    }
+
+    private static final Map<String, String> SECTION_NAMES = Map.of("eat", "places to eat", "drink", "cafés and drinks",
+            "stay", "places to stay", "see", "sights", "do", "things to do", "buy", "shopping");
+
     @PostMapping("/flags/{id}/dismiss")
-    @Transactional
     @Operation(summary = "Disagree with the flag: the listing stays as it is")
     public Map<String, Object> dismiss(@PathVariable UUID id) {
-        UUID admin = current.require().id();
-        Map<String, Object> f = open(id);
-        resolve(id, "dismissed", admin);
-        audit.record(admin, "ai_flag.dismissed", "guide_entry", f.get("entry_id"), (UUID) f.get("destination_id"), Map.of("flag", id.toString()));
+        requireOpen(id);
+        fixes.keep(id, current.require().id(), false, false);
         return Map.of("status", "dismissed", "message", "The listing stays in the guide.");
+    }
+
+    @PostMapping("/flags/{id}/undo")
+    @Operation(summary = "Reverse a move or a hide (made automatically or by an admin)")
+    public Map<String, Object> undo(@PathVariable UUID id) {
+        fixes.undo(id, current.require().id());
+        return Map.of("status", "undone", "message", "Undone: the listing is back as the source has it.");
+    }
+
+    public record Decision(UUID id, String destinationSlug, String destinationName, String title, String section, String resolution,
+                           String previousSection, boolean automatic, String reason, double confidence, OffsetDateTime decidedAt) {}
+
+    @GetMapping("/decisions")
+    @Operation(summary = "Recent decisions on flags, newest first; automatic ones can be undone")
+    public PageResponse<Decision> decisions(@RequestParam(required = false) Boolean automatic, @RequestParam(required = false) Integer page,
+                                            @RequestParam(required = false) Integer size) {
+        int p = PageResponse.clampPage(page);
+        int sz = PageResponse.clampSize(size, 25);
+        String where = " WHERE r.status IN ('accepted', 'dismissed') AND r.resolution IS NOT NULL"
+                + " AND (CAST(:auto AS boolean) IS NULL OR r.decided_automatically = :auto)";
+        long total = jdbc.sql("SELECT count(*) FROM ai_review r" + where).param("auto", automatic).query(Long.class).single();
+        List<Decision> items = jdbc.sql("""
+                        SELECT r.id, d.slug AS destination_slug, d.name AS destination_name, e.title, e.section, r.resolution,
+                               r.previous_section, r.decided_automatically AS automatic, r.reason, r.confidence, r.resolved_at AS decided_at
+                        FROM ai_review r JOIN guide_entry e ON e.id = r.entry_id JOIN place d ON d.id = r.destination_id""" + where + """
+                         ORDER BY r.resolved_at DESC LIMIT :limit OFFSET :offset""")
+                .param("auto", automatic).param("limit", sz).param("offset", p * sz).query(Decision.class).list();
+        return PageResponse.of(items, p, sz, total);
+    }
+
+    @PostMapping("/decide-now")
+    @Operation(summary = "Apply the automatic rules to every open flag now (they also run every 30 minutes)")
+    public Map<String, Object> decideNow() {
+        int n = decider.sweep();
+        return Map.of("decided", n, "message", n + " flags decided automatically. The rest need a person.");
+    }
+
+    private void requireOpen(UUID id) {
+        boolean open = jdbc.sql("SELECT EXISTS (SELECT 1 FROM ai_review WHERE id = :id AND status = 'open')").param("id", id)
+                .query(Boolean.class).single();
+        if (!open) {
+            throw ApiException.notFound("Open flag");
+        }
     }
 
     @PostMapping("/destinations/{slug}")
@@ -213,16 +263,7 @@ public class AiReviewController {
         }
     }
 
-    private Map<String, Object> open(UUID id) {
-        return jdbc.sql("SELECT entry_id, destination_id, reason FROM ai_review WHERE id = :id AND status = 'open'")
-                .param("id", id).query().listOfRows().stream().findFirst()
-                .orElseThrow(() -> ApiException.notFound("Open flag"));
-    }
 
-    private void resolve(UUID id, String status, UUID admin) {
-        jdbc.sql("UPDATE ai_review SET status = :s, resolved_by = :u, resolved_at = now() WHERE id = :id")
-                .param("s", status).param("u", admin).param("id", id).update();
-    }
 
     private long count(String sql) {
         return jdbc.sql(sql).query(Long.class).single();

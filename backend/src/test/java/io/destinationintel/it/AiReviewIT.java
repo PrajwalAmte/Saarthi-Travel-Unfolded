@@ -48,11 +48,16 @@ class AiReviewIT extends IntegrationTest {
     }
 
     private UUID guideWithMisfiledFort() {
+        return guideWithMisfiled("Old Fort");
+    }
+
+    /** A guide where one eat listing is really a fort; "Unsure" in the title makes the reviewer only 75% sure. */
+    private UUID guideWithMisfiled(String title) {
         UUID city = seedTestvillePlace();
         ingestGuide(city);
         UUID entry = jdbc.sql("SELECT id FROM guide_entry WHERE destination_id = :p AND section = 'eat' AND title = 'Lake View Restaurant'")
                 .param("p", city).query(UUID.class).single();
-        jdbc.sql("UPDATE guide_entry SET title = 'Old Fort' WHERE id = :id").param("id", entry).update();
+        jdbc.sql("UPDATE guide_entry SET title = :t WHERE id = :id").param("t", title).param("id", entry).update();
         jdbc.sql("DELETE FROM ingestion_job WHERE job_type = 'ai_review'").update();
         return city;
     }
@@ -84,11 +89,13 @@ class AiReviewIT extends IntegrationTest {
         JobRow job = runReview(city);
         assertThat(job.status()).isEqualTo("succeeded");
         assertThat(count("SELECT count(*) FROM ai_review")).isEqualTo(listings);
-        assertThat(count("SELECT count(*) FROM ai_review WHERE status = 'open'")).isEqualTo(1);
-        assertThat(jdbc.sql("SELECT e.title FROM ai_review r JOIN guide_entry e ON e.id = r.entry_id WHERE r.status = 'open'")
-                .query(String.class).single()).isEqualTo("Old Fort");
+        assertThat(count("SELECT count(*) FROM ai_review WHERE flagged")).isEqualTo(1);
+        assertThat(jdbc.sql("""
+                        SELECT e.title || ' ' || e.section || ' ' || r.resolution || ' ' || r.decided_automatically
+                        FROM ai_review r JOIN guide_entry e ON e.id = r.entry_id WHERE r.flagged""")
+                .query(String.class).single()).as("a confident wrong-section flag is moved without an admin").isEqualTo("Old Fort see moved true");
         assertThat(count("SELECT count(*) FROM guide_entry WHERE status = 'published' AND section <> 'neighbourhood'"))
-                .as("the reviewer hides nothing by itself").isEqualTo(listings);
+                .as("moving loses nothing").isEqualTo(listings);
         assertThat(jdbc.sql("SELECT string_agg(value_text, '|' ORDER BY id) FROM fact").query(String.class).single())
                 .as("the reviewer never changes text").isEqualTo(factsBefore);
 
@@ -98,8 +105,8 @@ class AiReviewIT extends IntegrationTest {
     }
 
     @Test
-    void anAdminDecidesEachFlag() throws Exception {
-        UUID city = guideWithMisfiledFort();
+    void anAdminDecidesTheDoubtfulFlags() throws Exception {
+        UUID city = guideWithMisfiled("Unsure Fort");
         runReview(city);
         Cookie admin = signIn("admin@test.example", "Admin");
         mvc.perform(get("/api/admin/ai-review/flags")).andExpect(status().isUnauthorized());
@@ -107,7 +114,7 @@ class AiReviewIT extends IntegrationTest {
                 .andExpect(status().isOk()).andReturn());
         assertThat(flags.path("totalItems").asInt()).isEqualTo(1);
         JsonNode flag = flags.path("items").path(0);
-        assertThat(flag.path("title").asString()).isEqualTo("Old Fort");
+        assertThat(flag.path("title").asString()).isEqualTo("Unsure Fort");
         assertThat(flag.path("issues").path(0).asString()).isEqualTo("wrong_section");
         assertThat(flag.path("reason").asString()).contains("fort");
 
@@ -122,8 +129,8 @@ class AiReviewIT extends IntegrationTest {
 
         mvc.perform(post("/api/admin/ai-review/flags/" + flag.path("id").asString() + "/accept").with(csrf()).cookie(admin))
                 .andExpect(status().isOk());
-        assertThat(jdbc.sql("SELECT status FROM guide_entry WHERE title = 'Old Fort'").query(String.class).single()).isEqualTo("hidden");
-        assertThat(jdbc.sql("SELECT status_reason FROM guide_entry WHERE title = 'Old Fort'").query(String.class).single())
+        assertThat(jdbc.sql("SELECT status FROM guide_entry WHERE title = 'Unsure Fort'").query(String.class).single()).isEqualTo("hidden");
+        assertThat(jdbc.sql("SELECT status_reason FROM guide_entry WHERE title = 'Unsure Fort'").query(String.class).single())
                 .startsWith("Hidden after review:");
         assertThat(count("SELECT count(*) FROM audit_log WHERE action = 'ai_flag.accepted'")).isEqualTo(1);
         mvc.perform(post("/api/admin/ai-review/flags/" + flag.path("id").asString() + "/dismiss").with(csrf()).cookie(admin))
@@ -272,5 +279,70 @@ class AiReviewIT extends IntegrationTest {
         assertThat(regional).isTrue();
         assertThat(card.path("details").findValuesAsString("text")).as("the source's own price is not duplicated").doesNotContain("₹90");
         assertThat(count("SELECT count(*) FROM fact WHERE ingest_key LIKE 'ai:%'")).isZero();
+    }
+
+    @Test
+    void aConfidentMoveHappensByItselfSurvivesReimportAndCanBeUndone() throws Exception {
+        UUID city = guideWithMisfiledFort();
+        runReview(city);
+        UUID entry = jdbc.sql("SELECT id FROM guide_entry WHERE title = 'Old Fort'").query(UUID.class).single();
+        assertThat(jdbc.sql("SELECT section || '/' || section_override || '/' || status FROM guide_entry WHERE id = :e")
+                .param("e", entry).query(String.class).single()).isEqualTo("see/see/published");
+        assertThat(count("SELECT count(*) FROM fact WHERE entry_id = '" + entry + "' AND section <> 'see'")).isZero();
+        assertThat(count("SELECT count(*) FROM audit_log WHERE action = 'ai_flag.auto_moved'")).isEqualTo(1);
+        JsonNode explore = body(mvc.perform(get("/api/destinations/testville/sections/explore")).andReturn());
+        assertThat(explore.path("entries").path("items").findValuesAsString("id")).contains(entry.toString());
+
+        // A new revision of the source re-imports every listing: the move must survive it.
+        SourceStub.get().article("Testville", new SourceStub.Article(42, 1002, "2026-10-10T00:00:00Z", "testville-v2.wiki"));
+        try {
+            ingestGuide(city);
+        } finally {
+            SourceStub.get().article("Testville", new SourceStub.Article(42, 1001, "2026-10-01T00:00:00Z", "testville-v1.wiki"));
+        }
+        assertThat(jdbc.sql("SELECT section FROM guide_entry WHERE id = :e").param("e", entry).query(String.class).single())
+                .as("re-import respects the move").isEqualTo("see");
+
+        Cookie admin = signIn("admin@test.example", "Admin");
+        JsonNode decisions = body(mvc.perform(get("/api/admin/ai-review/decisions").param("automatic", "true").cookie(admin))
+                .andExpect(status().isOk()).andReturn());
+        assertThat(decisions.path("totalItems").asInt()).isEqualTo(1);
+        JsonNode d = decisions.path("items").path(0);
+        assertThat(d.path("resolution").asString()).isEqualTo("moved");
+        assertThat(d.path("previousSection").asString()).isEqualTo("eat");
+
+        mvc.perform(post("/api/admin/ai-review/flags/" + d.path("id").asString() + "/undo").with(csrf()).cookie(admin))
+                .andExpect(status().isOk());
+        assertThat(jdbc.sql("SELECT section || '/' || coalesce(section_override, '-') FROM guide_entry WHERE id = :e")
+                .param("e", entry).query(String.class).single()).as("back exactly as the source has it").isEqualTo("eat/-");
+        assertThat(count("SELECT count(*) FROM fact WHERE entry_id = '" + entry + "' AND section <> 'eat'")).isZero();
+        mvc.perform(post("/api/admin/ai-review/flags/" + d.path("id").asString() + "/undo").with(csrf()).cookie(admin))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void anAdminCanMoveADoubtfulOne() throws Exception {
+        UUID city = guideWithMisfiled("Unsure Fort");
+        runReview(city);
+        Cookie admin = signIn("admin@test.example", "Admin");
+        JsonNode flag = body(mvc.perform(get("/api/admin/ai-review/flags").cookie(admin)).andReturn()).path("items").path(0);
+        mvc.perform(post("/api/admin/ai-review/flags/" + flag.path("id").asString() + "/move").with(csrf()).cookie(admin))
+                .andExpect(status().isOk());
+        assertThat(jdbc.sql("SELECT section FROM guide_entry WHERE title = 'Unsure Fort'").query(String.class).single()).isEqualTo("see");
+        assertThat(count("SELECT count(*) FROM audit_log WHERE action = 'ai_flag.moved'")).isEqualTo(1);
+    }
+
+    @Test
+    void movingNeedsARealSection() throws Exception {
+        UUID city = guideWithMisfiled("Unsure Fort");
+        runReview(city);
+        Cookie admin = signIn("admin@test.example", "Admin");
+        String id = body(mvc.perform(get("/api/admin/ai-review/flags").cookie(admin)).andReturn()).path("items").path(0).path("id").asString();
+        mvc.perform(post("/api/admin/ai-review/flags/" + id + "/move").with(csrf()).cookie(admin)
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content("{\"section\":\"none\"}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/admin/ai-review/flags/" + id + "/move").with(csrf()).cookie(admin)
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content("{\"section\":\"eat\"}"))
+                .andExpect(status().isBadRequest());
     }
 }

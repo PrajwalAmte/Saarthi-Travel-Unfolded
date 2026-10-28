@@ -18,6 +18,7 @@ const usage: AiUsage = {
   openFlags: 1,
   reviewedListings: 340,
   queuedJobs: 3,
+  decidedAutomatically: 2,
 };
 
 const flag: AiFlag = {
@@ -43,6 +44,17 @@ function mockApi(u: AiUsage, flags: AiFlag[]) {
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = String(input);
     if (url.endsWith("/usage")) return json(u);
+    if (url.includes("/decisions?"))
+      return json({
+        items: [
+          { id: "d1", destinationSlug: "ranchi", destinationName: "Ranchi", title: "Little Italy", section: "eat", resolution: "moved", previousSection: "stay", automatic: true, reason: "An Italian restaurant.", confidence: 1, decidedAt: "2026-10-28T00:00:00Z" },
+          { id: "d2", destinationSlug: "kochi", destinationName: "Kochi", title: "Wall Street Finance", section: "buy", resolution: "hidden", previousSection: null, automatic: true, reason: "A finance company.", confidence: 0.95, decidedAt: "2026-10-28T00:00:00Z" },
+        ],
+        page: 0,
+        size: 15,
+        totalItems: 2,
+        totalPages: 1,
+      });
     if (url.endsWith("/publish") && init?.method === "PUT") return json({ published: true, message: "Readers now see AI improvements." });
     if (url.endsWith("/publish")) return json({ published: false });
     if (url.endsWith("/preview"))
@@ -124,5 +136,29 @@ describe("AiReviewPanel", () => {
     expect(screen.getByText(/Rejected: number "1888"/)).toBeInTheDocument();
     expect(screen.getByText(/rejected: number "1234"/)).toBeInTheDocument();
     expect(screen.getByText(/price: “Thali ₹180”/)).toBeInTheDocument();
+  });
+
+  it("offers to move a listing to the section the reviewer suggests", async () => {
+    const spy = mockApi(usage, [flag]);
+    render(<AiReviewPanel />);
+    await userEvent.click(await screen.findByRole("button", { name: "Move to sights" }));
+    await waitFor(() => expect(spy.mock.calls.some(([u, i]) => String(u).endsWith("/flags/f1/move") && i?.method === "POST")).toBe(true));
+  });
+
+  it("only offers hiding when there is nowhere better to put it", async () => {
+    mockApi(usage, [{ ...flag, suggestedSection: "none" }]);
+    render(<AiReviewPanel />);
+    expect(await screen.findByRole("button", { name: "Hide listing" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Move to/ })).not.toBeInTheDocument();
+  });
+
+  it("lists automatic decisions and lets the admin undo one", async () => {
+    const spy = mockApi(usage, []);
+    render(<AiReviewPanel />);
+    await userEvent.click(await screen.findByText("Decided automatically (2)"));
+    expect(screen.getByText(/moved from places to stay to places to eat/)).toBeInTheDocument();
+    expect(screen.getByText(/hidden · “A finance company\.”/)).toBeInTheDocument();
+    await userEvent.click(screen.getAllByRole("button", { name: "Undo" })[0]!);
+    await waitFor(() => expect(spy.mock.calls.some(([u, i]) => String(u).endsWith("/flags/d1/undo") && i?.method === "POST")).toBe(true));
   });
 });

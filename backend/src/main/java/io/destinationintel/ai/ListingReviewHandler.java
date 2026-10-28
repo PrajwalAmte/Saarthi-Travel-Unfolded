@@ -110,10 +110,20 @@ public class ListingReviewHandler implements JobHandler {
                             "summary", "tags", "facts")));
 
     record Listing(UUID id, String section, String title, String area, String description, String address,
-                   UUID descriptionFactId, String factKinds) {
+                   UUID descriptionFactId, String factKinds, String sourceSection) {
 
         Listing(UUID id, String section, String title, String area, String description, String address) {
-            this(id, section, title, area, description, address, null, "");
+            this(id, section, title, area, description, address, null, "", null);
+        }
+
+        Listing(UUID id, String section, String title, String area, String description, String address,
+                UUID descriptionFactId, String factKinds) {
+            this(id, section, title, area, description, address, descriptionFactId, factKinds, null);
+        }
+
+        /** The section the source files it under: a listing that was moved is not "new" to the reviewer. */
+        String hashSection() {
+            return sourceSection != null ? sourceSection : section;
         }
 
         boolean hasText() {
@@ -153,6 +163,13 @@ public class ListingReviewHandler implements JobHandler {
     private final AiPublishing publishing;
     private final OverviewWriter overview;
     private final io.destinationintel.guide.GuideBaseLoader loader;
+    private FlagDecider decider;
+
+    /** Set after construction to avoid a constructor cycle (the decider does not depend on this handler). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setDecider(FlagDecider decider) {
+        this.decider = decider;
+    }
 
     public ListingReviewHandler(GeminiClient gemini, AiProperties props, JdbcClient jdbc, PlaceRepository places, Json json,
                                 TransactionTemplate tx, AiFacts aiFacts, AiPublishing publishing, OverviewWriter overview,
@@ -193,7 +210,10 @@ public class ListingReviewHandler implements JobHandler {
                                (SELECT f.value_text FROM fact f WHERE f.entry_id = e.id AND f.kind = 'address' AND f.status = 'published' LIMIT 1) AS address,
                                (SELECT f.id FROM fact f WHERE f.entry_id = e.id AND f.kind = 'description' AND f.status = 'published' LIMIT 1) AS description_fact_id,
                                (SELECT string_agg(DISTINCT f.kind, ',') FROM fact f WHERE f.entry_id = e.id AND f.status = 'published'
-                                  AND (f.ingest_key IS NULL OR f.ingest_key NOT LIKE 'ai:%')) AS fact_kinds
+                                  AND (f.ingest_key IS NULL OR f.ingest_key NOT LIKE 'ai:%')) AS fact_kinds,
+                               CASE WHEN e.section_override IS NOT NULL THEN
+                                    (SELECT r.previous_section FROM ai_review r WHERE r.entry_id = e.id AND r.resolution = 'moved'
+                                     ORDER BY r.resolved_at DESC LIMIT 1) END AS source_section
                         FROM guide_entry e
                         WHERE e.destination_id = :d AND e.status = 'published' AND e.section <> 'neighbourhood'
                         ORDER BY e.section, e.title""")
@@ -257,6 +277,10 @@ public class ListingReviewHandler implements JobHandler {
             throw new Deferred(e.getMessage() + " (listings done; the destination overview waits)", untilTomorrowUtc());
         }
         loader.evict(place.id());
+        if (decider != null && flagged > 0) {
+            // Confident flags are decided now; only the doubtful ones wait for an admin.
+            stats.put("flagsDecidedAutomatically", decider.sweep());
+        }
         stats.put("reviewed", reviewed);
         stats.put("flagged", flagged);
         stats.put("summariesAccepted", summaries);
@@ -444,7 +468,7 @@ public class ListingReviewHandler implements JobHandler {
     }
 
     static String inputHash(Listing l) {
-        String s = String.join("\u001f", l.section(), l.title(), String.valueOf(l.area()), String.valueOf(l.description()),
+        String s = String.join("\u001f", l.hashSection(), l.title(), String.valueOf(l.area()), String.valueOf(l.description()),
                 String.valueOf(l.address()));
         try {
             byte[] d = MessageDigest.getInstance("SHA-256").digest(s.getBytes(StandardCharsets.UTF_8));

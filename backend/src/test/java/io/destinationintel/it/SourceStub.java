@@ -108,7 +108,9 @@ public final class SourceStub {
                         issues.add("wrong_section");
                     }
                     v.put("suggestedSection", misfiled ? "see" : l.path("section").asString());
-                    v.put("confidence", 0.95).put("reason", misfiled ? "The text describes a fort, not food." : "Fits.");
+                    // "Unsure" in a title makes the reviewer less certain, so the flag waits for a person.
+                    v.put("confidence", title.contains("Unsure") ? 0.75 : 0.95)
+                            .put("reason", misfiled ? "The text describes a fort, not food." : "Fits.");
                     String summary = "";
                     if (desc.length() >= 140) {
                         summary = title.contains("Fable") ? "Founded in 1888, a much-loved institution."

@@ -37,6 +37,21 @@ export type AiUsage = {
   openFlags: number;
   reviewedListings: number;
   queuedJobs: number;
+  decidedAutomatically: number;
+};
+
+export type AiDecision = {
+  id: string;
+  destinationSlug: string;
+  destinationName: string;
+  title: string;
+  section: string;
+  resolution: "moved" | "hidden" | "kept" | "noted";
+  previousSection: string | null;
+  automatic: boolean;
+  reason: string;
+  confidence: number;
+  decidedAt: string;
 };
 
 export type AiPreview = {
@@ -65,6 +80,21 @@ export type AiPreview = {
   }[];
 };
 
+const SECTION_TEXT: Record<string, string> = {
+  eat: "places to eat",
+  drink: "cafés and drinks",
+  stay: "places to stay",
+  see: "sights",
+  do: "things to do",
+  buy: "shopping",
+};
+
+/** Where the reviewer would move a listing, when that is a real section different from its current one. */
+function moveTarget(f: AiFlag): string | null {
+  const s = f.suggestedSection;
+  return s && s !== f.section && s in SECTION_TEXT ? s : null;
+}
+
 const ISSUE_TEXT: Record<string, string> = {
   wrong_section: "wrong section",
   outside_destination: "not in this destination",
@@ -87,6 +117,7 @@ export function AiReviewPanel() {
   const [published, setPublished] = React.useState<boolean | null>(null);
   const [previewSlug, setPreviewSlug] = React.useState("");
   const [preview, setPreview] = React.useState<AiPreview | null>(null);
+  const [decisions, setDecisions] = React.useState<Page<AiDecision> | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -94,12 +125,14 @@ export function AiReviewPanel() {
       api<AiUsage>("/api/admin/ai-review/usage"),
       api<Page<AiFlag>>("/api/admin/ai-review/flags?size=20"),
       api<{ published: boolean }>("/api/admin/ai-review/publish"),
+      api<Page<AiDecision>>("/api/admin/ai-review/decisions?automatic=true&size=15"),
     ])
-      .then(([u, f, p]) => {
+      .then(([u, f, p, d]) => {
         if (cancelled) return;
         setUsage(u);
         setFlags(f);
         setPublished(p.published);
+        setDecisions(d);
       })
       .catch((e) => {
         if (!cancelled) setMessage({ tone: "error", text: problemMessage(e) });
@@ -129,8 +162,9 @@ export function AiReviewPanel() {
         AI review of listings
       </h2>
       <p className="text-sm text-muted">
-        A language model reads each imported listing and flags the doubtful ones: a fort under Eat, a hotel in another city,
-        broken text. It never changes a listing; you decide.
+        A language model reads each imported listing. When it is confident, the listing is moved to the right section or
+        hidden (an ATM, a closed shop, a hotel in another city) without you; each of those can be undone below. Only the
+        doubtful ones wait here for you.
       </p>
       {message ? (
         <Notice tone={message.tone} role="status">
@@ -153,6 +187,7 @@ export function AiReviewPanel() {
           </span>
           <span>{usage.reviewedListings.toLocaleString("en-IN")} listings reviewed</span>
           <span>{usage.queuedJobs} reviews queued</span>
+          <span>{usage.decidedAutomatically.toLocaleString("en-IN")} decided automatically</span>
           <Button
             size="sm"
             variant="outline"
@@ -240,8 +275,18 @@ export function AiReviewPanel() {
                 Reviewer: “{f.reason}” ({Math.round(f.confidence * 100)}% sure
                 {f.suggestedSection && f.suggestedSection !== f.section ? `, belongs under ${f.suggestedSection}` : ""})
               </p>
-              <div className="flex gap-2">
-                <Button size="sm" disabled={busy !== null} onClick={() => void act(f.id, () => api(`/api/admin/ai-review/flags/${f.id}/accept`, { method: "POST" }))}>
+              <div className="flex flex-wrap gap-2">
+                {moveTarget(f) ? (
+                  <Button size="sm" disabled={busy !== null} onClick={() => void act(f.id, () => api(`/api/admin/ai-review/flags/${f.id}/move`, { method: "POST" }))}>
+                    Move to {SECTION_TEXT[moveTarget(f)!]}
+                  </Button>
+                ) : null}
+                <Button
+                  size="sm"
+                  variant={moveTarget(f) ? "outline" : "primary"}
+                  disabled={busy !== null}
+                  onClick={() => void act(f.id, () => api(`/api/admin/ai-review/flags/${f.id}/accept`, { method: "POST" }))}
+                >
                   Hide listing
                 </Button>
                 <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void act(f.id, () => api(`/api/admin/ai-review/flags/${f.id}/dismiss`, { method: "POST" }))}>
@@ -254,6 +299,43 @@ export function AiReviewPanel() {
       ) : flags ? (
         <p className="text-sm text-muted">No open flags.</p>
       ) : null}
+      {decisions && decisions.items.length ? (
+        <details className="rounded-lg border border-line bg-surface p-3 text-sm">
+          <summary className="cursor-pointer select-none font-medium">
+            Decided automatically ({decisions.totalItems.toLocaleString("en-IN")})
+          </summary>
+          <ul className="mt-2 divide-y divide-line">
+            {decisions.items.map((d) => (
+              <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                <span className="min-w-0">
+                  <span className="font-medium">{d.title}</span>{" "}
+                  <span className="text-muted">
+                    in{" "}
+                    <Link className="underline" href={`/d/${d.destinationSlug}`}>
+                      {d.destinationName}
+                    </Link>
+                    {": "}
+                    {d.resolution === "moved"
+                      ? `moved from ${SECTION_TEXT[d.previousSection ?? ""] ?? d.previousSection} to ${SECTION_TEXT[d.section] ?? d.section}`
+                      : d.resolution === "hidden"
+                        ? "hidden"
+                        : d.resolution === "noted"
+                          ? "noted, left as is"
+                          : "kept"}
+                    {" · "}“{d.reason}”
+                  </span>
+                </span>
+                {d.resolution === "moved" || d.resolution === "hidden" ? (
+                  <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void act(d.id, () => api(`/api/admin/ai-review/flags/${d.id}/undo`, { method: "POST" }))}>
+                    Undo
+                  </Button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+
       {flags && flags.totalItems > flags.items.length ? (
         <p className="text-sm text-muted">Showing the {flags.items.length} most confident of {flags.totalItems.toLocaleString("en-IN")} open flags.</p>
       ) : null}

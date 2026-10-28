@@ -19,6 +19,10 @@ const usage: AiUsage = {
   reviewedListings: 340,
   queuedJobs: 3,
   decidedAutomatically: 2,
+  models: [
+    { name: "gemini-flash-lite-latest", requestsToday: 12, requestsPerDay: 480, requestsPerMinute: 14 },
+    { name: "gemini-3.8-flash", requestsToday: 0, requestsPerDay: 18, requestsPerMinute: 4 },
+  ],
 };
 
 const flag: AiFlag = {
@@ -90,7 +94,7 @@ describe("AiReviewPanel", () => {
     mockApi(usage, [flag]);
     render(<AiReviewPanel />);
     expect(await screen.findByText("Qutub Minar")).toBeInTheDocument();
-    expect(screen.getByText(/12/)).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Requests per model today" })).toHaveTextContent(/gemini-flash-lite-latest\s*12\/480/);
     expect(screen.getByText("wrong section")).toBeInTheDocument();
     expect(screen.getByText(/A minaret, not a place to eat/)).toBeInTheDocument();
     expect(screen.getByText(/95% sure, belongs under see/)).toBeInTheDocument();

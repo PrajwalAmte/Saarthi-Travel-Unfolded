@@ -37,21 +37,21 @@ public class OverviewWriter {
             For each sentence list the ids of every fact it uses. Plain, neutral language; no superlatives the facts do not use.""";
 
     static final Map<String, Object> SCHEMA = Map.of(
-            "type", "ARRAY",
-            "items", Map.of("type", "OBJECT", "properties", Map.of(
-                    "topic", Map.of("type", "STRING", "enum", TOPICS),
-                    "text", Map.of("type", "STRING"),
-                    "factIds", Map.of("type", "ARRAY", "items", Map.of("type", "STRING"))),
+            "type", "array",
+            "items", Map.of("type", "object", "properties", Map.of(
+                    "topic", Map.of("type", "string", "enum", TOPICS),
+                    "text", Map.of("type", "string"),
+                    "factIds", Map.of("type", "array", "items", Map.of("type", "string"))),
                     "required", List.of("topic", "text", "factIds")));
 
     record SourceFact(UUID id, String kind, String section, String text) {}
 
-    private final GeminiClient gemini;
+    private final LlmClient llm;
     private final JdbcClient jdbc;
     private final Json json;
 
-    public OverviewWriter(GeminiClient gemini, JdbcClient jdbc, Json json) {
-        this.gemini = gemini;
+    public OverviewWriter(LlmClient llm, JdbcClient jdbc, Json json) {
+        this.llm = llm;
         this.jdbc = jdbc;
         this.json = json;
     }
@@ -83,8 +83,9 @@ public class OverviewWriter {
             numbered.add(Map.of("id", "f" + (i + 1), "kind", facts.get(i).kind(),
                     "text", ListingReviewHandler.shorten(facts.get(i).text(), 500)));
         }
-        GeminiClient.Answer answer = gemini.generateJson(SYSTEM, "Destination: " + place.name()
-                + (state == null ? "" : " (" + state + ")") + ", India.\nFacts (JSON):\n" + json.write(numbered), SCHEMA);
+        LlmClient.Answer answer = llm.generateJson(SYSTEM, "Destination: " + place.name()
+                + (state == null ? "" : " (" + state + ")") + ", India.\nFacts (JSON):\n" + json.write(numbered), SCHEMA,
+                LlmClient.Purpose.QUALITY);
         List<Map<String, Object>> accepted = new ArrayList<>();
         List<Map<String, Object>> rejected = new ArrayList<>();
         validate(answer.json(), facts, place.name(), state, accepted, rejected);

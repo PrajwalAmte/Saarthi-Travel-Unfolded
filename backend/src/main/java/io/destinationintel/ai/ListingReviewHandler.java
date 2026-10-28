@@ -86,26 +86,27 @@ public class ListingReviewHandler implements JobHandler {
               (for example "Thali ₹180" or "open 9AM-6PM, closed Mondays"). Return [] when there are none.
             Return exactly one result per listing id.""";
 
+    /** Standard JSON Schema; each provider translates it. */
     static final Map<String, Object> SCHEMA = Map.of(
-            "type", "ARRAY",
+            "type", "array",
             "items", Map.of(
-                    "type", "OBJECT",
+                    "type", "object",
                     "properties", Map.of(
-                            "id", Map.of("type", "STRING"),
-                            "fitsSection", Map.of("type", "BOOLEAN"),
-                            "inDestination", Map.of("type", "STRING", "enum", List.of("yes", "no", "unclear")),
-                            "issues", Map.of("type", "ARRAY", "items", Map.of("type", "STRING", "enum",
+                            "id", Map.of("type", "string"),
+                            "fitsSection", Map.of("type", "boolean"),
+                            "inDestination", Map.of("type", "string", "enum", List.of("yes", "no", "unclear")),
+                            "issues", Map.of("type", "array", "items", Map.of("type", "string", "enum",
                                     List.of("wrong_section", "outside_destination", "about_another_business", "broken_text", "closed", "too_thin"))),
-                            "suggestedSection", Map.of("type", "STRING", "enum", List.of("eat", "drink", "stay", "see", "do", "buy", "none")),
-                            "confidence", Map.of("type", "NUMBER"),
-                            "reason", Map.of("type", "STRING"),
-                            "summary", Map.of("type", "STRING"),
-                            "tags", Map.of("type", "ARRAY", "items", Map.of("type", "OBJECT", "properties", Map.of(
-                                    "tag", Map.of("type", "STRING", "enum", List.copyOf(new java.util.TreeSet<>(TAGS))),
-                                    "quote", Map.of("type", "STRING")), "required", List.of("tag", "quote"))),
-                            "facts", Map.of("type", "ARRAY", "items", Map.of("type", "OBJECT", "properties", Map.of(
-                                    "kind", Map.of("type", "STRING", "enum", List.of("price", "hours")),
-                                    "quote", Map.of("type", "STRING")), "required", List.of("kind", "quote")))),
+                            "suggestedSection", Map.of("type", "string", "enum", List.of("eat", "drink", "stay", "see", "do", "buy", "none")),
+                            "confidence", Map.of("type", "number"),
+                            "reason", Map.of("type", "string"),
+                            "summary", Map.of("type", "string"),
+                            "tags", Map.of("type", "array", "items", Map.of("type", "object", "properties", Map.of(
+                                    "tag", Map.of("type", "string", "enum", List.copyOf(new java.util.TreeSet<>(TAGS))),
+                                    "quote", Map.of("type", "string")), "required", List.of("tag", "quote"))),
+                            "facts", Map.of("type", "array", "items", Map.of("type", "object", "properties", Map.of(
+                                    "kind", Map.of("type", "string", "enum", List.of("price", "hours")),
+                                    "quote", Map.of("type", "string")), "required", List.of("kind", "quote")))),
                     "required", List.of("id", "fitsSection", "inDestination", "issues", "suggestedSection", "confidence", "reason",
                             "summary", "tags", "facts")));
 
@@ -153,7 +154,7 @@ public class ListingReviewHandler implements JobHandler {
         }
     }
 
-    private final GeminiClient gemini;
+    private final LlmClient llm;
     private final AiProperties props;
     private final JdbcClient jdbc;
     private final PlaceRepository places;
@@ -171,10 +172,10 @@ public class ListingReviewHandler implements JobHandler {
         this.decider = decider;
     }
 
-    public ListingReviewHandler(GeminiClient gemini, AiProperties props, JdbcClient jdbc, PlaceRepository places, Json json,
+    public ListingReviewHandler(LlmClient llm, AiProperties props, JdbcClient jdbc, PlaceRepository places, Json json,
                                 TransactionTemplate tx, AiFacts aiFacts, AiPublishing publishing, OverviewWriter overview,
                                 io.destinationintel.guide.GuideBaseLoader loader) {
-        this.gemini = gemini;
+        this.llm = llm;
         this.props = props;
         this.jdbc = jdbc;
         this.places = places;
@@ -194,7 +195,7 @@ public class ListingReviewHandler implements JobHandler {
     @Override
     public Map<String, Object> run(JobRow job) {
         Map<String, Object> stats = new LinkedHashMap<>();
-        if (!gemini.active()) {
+        if (!llm.active()) {
             stats.put("skipped", "AI review is not enabled on this server");
             return stats;
         }
@@ -238,13 +239,13 @@ public class ListingReviewHandler implements JobHandler {
         String model = null;
         for (int i = 0; i < todo.size(); i += props.batchSize()) {
             List<Listing> batch = todo.subList(i, Math.min(todo.size(), i + props.batchSize()));
-            GeminiClient.Answer answer;
+            LlmClient.Answer answer;
             try {
-                answer = gemini.generateJson(SYSTEM, prompt(place, state, batch), SCHEMA);
-            } catch (GeminiClient.BudgetExhausted e) {
+                answer = llm.generateJson(SYSTEM, prompt(place, state, batch), SCHEMA, LlmClient.Purpose.BULK);
+            } catch (LlmClient.BudgetExhausted e) {
                 // Keep what is done; the rest waits for tomorrow's quota.
                 stats.put("reviewed", reviewed);
-                throw new Deferred(e.getMessage() + " (" + reviewed + " listings reviewed before it ran out)", untilTomorrowUtc());
+                throw new Deferred(e.getMessage() + " (" + reviewed + " listings reviewed before it ran out)", llm.untilQuotaReset());
             }
             requests++;
             model = answer.model();
@@ -273,8 +274,8 @@ public class ListingReviewHandler implements JobHandler {
         }
         try {
             stats.put("overview", overview.write(place, state));
-        } catch (GeminiClient.BudgetExhausted e) {
-            throw new Deferred(e.getMessage() + " (listings done; the destination overview waits)", untilTomorrowUtc());
+        } catch (LlmClient.BudgetExhausted e) {
+            throw new Deferred(e.getMessage() + " (listings done; the destination overview waits)", llm.untilQuotaReset());
         }
         loader.evict(place.id());
         if (decider != null && flagged > 0) {
@@ -494,9 +495,4 @@ public class ListingReviewHandler implements JobHandler {
         return s.length() <= max ? s : s.substring(0, max);
     }
 
-    private static Duration untilTomorrowUtc() {
-        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-        OffsetDateTime next = LocalDate.now(ZoneOffset.UTC).plusDays(1).atStartOfDay().atOffset(ZoneOffset.UTC).plusMinutes(5);
-        return Duration.between(now, next);
-    }
 }

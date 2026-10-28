@@ -22,12 +22,11 @@ import tools.jackson.databind.JsonNode;
 @TestPropertySource(properties = {
         "app.ai.enabled=true",
         "app.ai.gemini-api-key=test-key",
-        "app.ai.model=primary-model",
-        "app.ai.fallback-model=fallback-model",
+        "app.ai.models=gone-model:50:6000,primary-model:50:6000,fallback-model:50:6000",
         "app.ai.min-interval=0s",
         "app.ai.retry-base-delay=10ms",
         "app.ai.batch-size=4",
-        "app.ai.daily-request-budget=50"
+        "app.ai.daily-request-budget=1000"
 })
 class AiReviewIT extends IntegrationTest {
 
@@ -155,15 +154,20 @@ class AiReviewIT extends IntegrationTest {
     @Test
     void aSpentDailyQuotaPausesTheJobUntilTomorrowKeepingWhatWasDone() {
         UUID city = guideWithMisfiledFort();
-        jdbc.sql("INSERT INTO ai_usage (day, requests) VALUES ((now() AT TIME ZONE 'UTC')::date, 49)").update();
+        // One request left on the main model, none on the fallback (a retired model never counts for long).
+        jdbc.sql("""
+                INSERT INTO ai_usage (day, model, requests) VALUES
+                    ((now() AT TIME ZONE 'America/Los_Angeles')::date, 'primary-model', 49),
+                    ((now() AT TIME ZONE 'America/Los_Angeles')::date, 'fallback-model', 50)""").update();
         JobRow job = runReview(city);
         assertThat(job.status()).as("deferred, not failed").isEqualTo("queued");
         assertThat(job.attempts()).isZero();
         assertThat(job.nextAttemptAt()).isAfter(OffsetDateTime.now().plusMinutes(1));
-        assertThat(job.lastError()).contains("budget");
+        assertThat(job.lastError()).startsWith("Waiting: ").contains("used up on every model");
         assertThat(count("SELECT count(*) FROM ai_review")).as("the one allowed request was kept").isEqualTo(4);
         assertThat(count("SELECT count(*) FROM ai_enrichment")).isEqualTo(4);
-        assertThat(count("SELECT requests FROM ai_usage")).isEqualTo(50);
+        assertThat(job.nextAttemptAt()).as("resumes on Google's next quota day").isBefore(OffsetDateTime.now().plusHours(25));
+        assertThat(count("SELECT requests FROM ai_usage WHERE model = 'primary-model'")).isEqualTo(50);
     }
 
     static final String LONG = "Very good dosa, a local favourite near the old market. Breakfast is ₹90 and coffee comes in "
@@ -344,5 +348,13 @@ class AiReviewIT extends IntegrationTest {
         mvc.perform(post("/api/admin/ai-review/flags/" + id + "/move").with(csrf()).cookie(admin)
                         .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content("{\"section\":\"eat\"}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void aRetiredModelIsSkippedAndTheNextOneUsed() {
+        UUID city = guideWithMisfiledFort();
+        JobRow job = runReview(city);
+        assertThat(job.status()).isEqualTo("succeeded");
+        assertThat(jdbc.sql("SELECT DISTINCT model FROM ai_review").query(String.class).list()).doesNotContain("gone-model");
     }
 }

@@ -34,7 +34,10 @@ public class AiReviewController {
                        String suggestedSection, double confidence, String reason, String model, OffsetDateTime createdAt) {}
 
     public record Usage(boolean active, String model, String fallbackModel, int requestsToday, int dailyBudget, long tokensToday,
-                        long openFlags, long reviewedListings, long queuedJobs, long decidedAutomatically) {}
+                        long openFlags, long reviewedListings, long queuedJobs, long decidedAutomatically, List<ModelUsage> models) {}
+
+    /** One model's use today (Google's quota day) against its free limits. */
+    public record ModelUsage(String name, int requestsToday, int requestsPerDay, int requestsPerMinute) {}
 
     private final JdbcClient jdbc;
     private final CurrentUser current;
@@ -120,15 +123,22 @@ public class AiReviewController {
     @GetMapping("/usage")
     @Operation(summary = "Whether AI review is on, today's request use against the budget, and open flags")
     public Usage usage() {
-        Map<String, Object> u = jdbc.sql("SELECT requests, tokens FROM ai_usage WHERE day = (now() AT TIME ZONE 'UTC')::date")
-                .query().listOfRows().stream().findFirst().orElse(Map.of());
-        return new Usage(props.active(), props.model(), props.fallbackModel(),
-                u.get("requests") instanceof Number n ? n.intValue() : 0, props.dailyRequestBudget(),
-                u.get("tokens") instanceof Number t ? t.longValue() : 0,
+        Map<String, Integer> used = new java.util.HashMap<>();
+        long tokens = 0;
+        for (Map<String, Object> row : jdbc.sql("SELECT model, requests, tokens FROM ai_usage WHERE day = " + GeminiClient.QUOTA_DAY)
+                .query().listOfRows()) {
+            used.put(String.valueOf(row.get("model")), ((Number) row.get("requests")).intValue());
+            tokens += ((Number) row.get("tokens")).longValue();
+        }
+        List<ModelUsage> models = props.pool().stream()
+                .map(m -> new ModelUsage(m.name(), used.getOrDefault(m.name(), 0), m.requestsPerDay(), m.requestsPerMinute())).toList();
+        int requests = used.values().stream().mapToInt(Integer::intValue).sum();
+        int budget = Math.min(props.dailyRequestBudget(), models.stream().mapToInt(ModelUsage::requestsPerDay).sum());
+        return new Usage(props.active(), models.isEmpty() ? props.model() : models.get(0).name(), null, requests, budget, tokens,
                 count("SELECT count(*) FROM ai_review WHERE status = 'open'"),
                 count("SELECT count(DISTINCT entry_id) FROM ai_review"),
                 count("SELECT count(*) FROM ingestion_job WHERE job_type = 'ai_review' AND status IN ('queued', 'running')"),
-                count("SELECT count(*) FROM ai_review WHERE decided_automatically"));
+                count("SELECT count(*) FROM ai_review WHERE decided_automatically"), models);
     }
 
     @GetMapping("/flags")

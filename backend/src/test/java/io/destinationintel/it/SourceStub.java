@@ -81,6 +81,12 @@ public final class SourceStub {
             String path = exchange.getRequestURI().getPath();
             String model = path.substring(path.lastIndexOf('/') + 1, path.indexOf(':', path.lastIndexOf('/')));
             geminiCalls.add(model);
+            if (model.startsWith("gone-")) {
+                // A model Google has retired for new keys.
+                exchange.sendResponseHeaders(404, -1);
+                exchange.close();
+                return;
+            }
             if (busyModels.contains(model)) {
                 exchange.sendResponseHeaders(503, -1);
                 exchange.close();

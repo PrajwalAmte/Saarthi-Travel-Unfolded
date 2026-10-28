@@ -38,6 +38,7 @@ export type AiUsage = {
   reviewedListings: number;
   queuedJobs: number;
   decidedAutomatically: number;
+  models?: { name: string; requestsToday: number; requestsPerDay: number; requestsPerMinute: number }[];
 };
 
 export type AiDecision = {
@@ -179,11 +180,7 @@ export function AiReviewPanel() {
       {usage?.active ? (
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
           <span>
-            Model <span className="font-medium">{usage.model}</span>
-            {usage.fallbackModel ? <span className="text-muted"> (fallback {usage.fallbackModel})</span> : null}
-          </span>
-          <span>
-            Today <span className="font-medium tabular-nums">{usage.requestsToday}</span> of {usage.dailyBudget} requests
+            Today <span className="font-medium tabular-nums">{usage.requestsToday}</span> of {usage.dailyBudget} free requests
           </span>
           <span>{usage.reviewedListings.toLocaleString("en-IN")} listings reviewed</span>
           <span>{usage.queuedJobs} reviews queued</span>
@@ -244,6 +241,19 @@ export function AiReviewPanel() {
       </form>
 
       {preview ? <PreviewView p={preview} /> : null}
+
+      {usage?.active && usage.models?.length ? (
+        <ul className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted" aria-label="Requests per model today">
+          {usage.models.map((m) => (
+            <li key={m.name}>
+              <span className="font-medium text-ink-2">{m.name}</span>{" "}
+              <span className="tabular-nums">
+                {m.requestsToday}/{m.requestsPerDay}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
 
       {flags && flags.items.length ? (
         <ul className="divide-y divide-line rounded-lg border border-line bg-surface">

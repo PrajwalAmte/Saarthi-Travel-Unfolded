@@ -99,15 +99,18 @@ app:
     gemini-api-key: ${GEMINI_KEY:}
     gemini-api-url: ${GEMINI_API_URL:https://generativelanguage.googleapis.com/v1beta}
     model: ${GEMINI_MODEL:gemini-flash-lite-latest}
-    fallback-model: ${GEMINI_FALLBACK_MODEL:gemini-2.5-flash-lite}
-    # Stay inside the free tier: at most this many model requests per day (UTC), at most one every min-interval.
-    daily-request-budget: ${AI_DAILY_REQUEST_BUDGET:200}
+    fallback-model: ${GEMINI_FALLBACK_MODEL:}
+    # Free models to use, "name:requestsPerDay:requestsPerMinute", set just under each model's free limits (see Google
+    # AI Studio > Rate limits). Bulk work uses them in this order; destination overviews prefer the stronger ones.
+    models: ${GEMINI_MODELS:gemini-flash-lite-latest:480:14,gemini-3.8-flash:18:4,gemini-3-flash-preview:18:4,gemini-2.5-flash:18:4}
+    # Safety cap across all models per day. Days follow Google's quota day (midnight Pacific time).
+    daily-request-budget: ${AI_DAILY_REQUEST_BUDGET:1000}
     min-interval: 4s
     request-timeout: 90s
     # Wait before retrying a busy model; tripled on each further attempt, then the fallback model is tried.
     retry-base-delay: 5s
     # Listings per request. Each answer carries a review, summary, tags and facts per listing, so keep it modest.
-    batch-size: 12
+    batch-size: 20
   notifications:
     # "Your guide is ready" emails. Turn off on any machine that shares the production database but is not the live site.
     enabled: ${REQUEST_NOTIFICATIONS_ENABLED:true}

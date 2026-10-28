@@ -57,6 +57,17 @@ public class JobRunner {
         }
     }
 
+    static final Duration RATE_LIMIT_WAIT = Duration.ofHours(1);
+
+    static boolean rateLimited(Throwable e) {
+        for (Throwable t = e; t != null; t = t.getCause()) {
+            if (t instanceof HttpFetcher.FetchException f && f.status() == 429) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public void execute(JobRow job) {
         JobHandler handler = handlers.get(job.jobType());
         MDC.put("requestId", "job-" + job.id().toString().substring(0, 8));
@@ -78,6 +89,12 @@ public class JobRunner {
             log.warn("{} job {} failed permanently: {}", job.jobType(), job.id(), e.getMessage());
             jobs.fail(job.id(), e.getMessage(), false);
         } catch (RuntimeException e) {
+            if (rateLimited(e)) {
+                // The source asked us to slow down. That is not a failure: wait and try again, without using an attempt.
+                log.info("{} job {} rate-limited by the source; trying again in an hour", job.jobType(), job.id());
+                jobs.defer(job.id(), RATE_LIMIT_WAIT, "the source asked us to slow down (HTTP 429), trying again in an hour");
+                return;
+            }
             log.warn("{} job {} failed: {}", job.jobType(), job.id(), e.toString());
             jobs.fail(job.id(), e.getClass().getSimpleName() + ": " + e.getMessage(), true);
         } finally {

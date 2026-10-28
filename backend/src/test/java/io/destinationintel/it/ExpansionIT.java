@@ -53,4 +53,17 @@ class ExpansionIT extends IntegrationTest {
         assertThat(jdbc.sql("SELECT count(*) FROM ingestion_job WHERE job_type = 'wikivoyage_guide' AND target_place_id = :p")
                 .param("p", city).query(Long.class).single()).isEqualTo(1);
     }
+
+    @Test
+    void guidesThatNeverGotWeatherDataAreCaughtUpInSmallBatches() {
+        UUID city = seedTestvillePlace();
+        ingestGuide(city);
+        jdbc.sql("DELETE FROM ingestion_job").update();
+        jdbc.sql("DELETE FROM place_source_sync WHERE source_id = 'open-meteo'").update();
+        var plan = scheduler.planRefreshes("scheduler");
+        assertThat(plan.get("climateMissing")).isEqualTo(1);
+        assertThat(jdbc.sql("SELECT count(*) FROM ingestion_job WHERE job_type = 'climate' AND target_place_id = :p")
+                .param("p", city).query(Long.class).single()).isEqualTo(1);
+        assertThat(scheduler.planRefreshes("scheduler").get("climateMissing")).as("already queued").isEqualTo(0);
+    }
 }

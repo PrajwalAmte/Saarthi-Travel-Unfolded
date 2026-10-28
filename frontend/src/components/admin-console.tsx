@@ -20,6 +20,11 @@ const STATUS_TONE: Record<string, "neutral" | "verified" | "stale" | "conflict" 
   cancelled: "neutral",
 };
 
+/** A queued job whose note starts with "Waiting:" is paused on purpose (daily quota, rate limit), not failing. */
+export function isWaiting(j: Pick<JobView, "status" | "lastError">): boolean {
+  return j.status === "queued" && Boolean(j.lastError?.startsWith("Waiting:"));
+}
+
 type UserRow = { id: string; displayName: string; email: string | null; tier: string; admin: boolean; status: string; createdAt: string };
 type MatchItem = {
   id: string;
@@ -189,11 +194,15 @@ export function AdminConsole() {
                   <tr key={j.id} className="border-t border-line align-top">
                     <td className="px-3 py-2 font-medium">{j.jobType}</td>
                     <td className="px-3 py-2">{j.targetPlaceSlug ? <Link className="underline" href={`/d/${j.targetPlaceSlug}`}>{j.targetPlaceName}</Link> : (j.params.wikidataId as string | undefined) ?? "—"}</td>
-                    <td className="px-3 py-2"><Badge tone={STATUS_TONE[j.status] ?? "neutral"}>{j.status}</Badge></td>
+                    <td className="px-3 py-2"><Badge tone={STATUS_TONE[j.status] ?? "neutral"}>{isWaiting(j) ? "waiting" : j.status}</Badge></td>
                     <td className="px-3 py-2 tabular-nums">{j.attempts}/{j.maxAttempts}</td>
                     <td className="px-3 py-2 text-xs text-muted">{formatDate(j.createdAt)}</td>
                     <td className="max-w-md px-3 py-2 text-xs">
-                      {j.lastError ? <span className="break-words text-conflict">{j.lastError}</span> : <code className="break-words text-muted">{JSON.stringify(j.stats).slice(0, 220)}</code>}
+                      {j.lastError ? (
+                        <span className={isWaiting(j) ? "break-words text-muted" : "break-words text-conflict"}>{j.lastError}</span>
+                      ) : (
+                        <code className="break-words text-muted">{JSON.stringify(j.stats).slice(0, 220)}</code>
+                      )}
                     </td>
                     <td className="px-3 py-2">
                       {j.status === "failed" || j.status === "cancelled" ? (

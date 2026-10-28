@@ -23,4 +23,17 @@ class JobQueueIT extends IntegrationTest {
         // An unrestricted worker takes everything, highest priority first.
         assertThat(jobs.claimNext().orElseThrow().jobType()).isEqualTo("osm_extract");
     }
+
+    @Test
+    void aPausedJobKeepsItsAttemptsAndIsMarkedAsWaiting() {
+        java.util.UUID id = jobs.enqueue("climate", "open-meteo", null, Map.of(), "climate:x", 1, "admin");
+        var job = jobs.claimNext().orElseThrow();
+        jobs.defer(job.id(), java.time.Duration.ofHours(1), "the source asked us to slow down (HTTP 429), trying again in an hour");
+        var after = jobs.find(id).orElseThrow();
+        assertThat(after.status()).isEqualTo("queued");
+        assertThat(after.attempts()).isZero();
+        assertThat(after.lastError()).startsWith("Waiting: the source asked us to slow down");
+        assertThat(after.nextAttemptAt()).isAfter(java.time.OffsetDateTime.now().plusMinutes(50));
+        assertThat(jobs.claimNext()).as("not due yet").isEmpty();
+    }
 }

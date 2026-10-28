@@ -96,6 +96,20 @@ public class WikivoyageGuideHandler implements JobHandler {
         this.ai = ai;
     }
 
+    /** True when the place has no data from this source yet, or it is older than the source's refresh interval. */
+    boolean followUpDue(java.util.UUID placeId, String sourceId) {
+        String last = sourceId.equals("wikimedia-commons")
+                ? "SELECT max(fetched_at) FROM place_image WHERE place_id = :p"
+                : "SELECT max(last_synced_at) FROM place_source_sync WHERE place_id = :p AND source_id = :s AND last_status <> 'failed'";
+        java.time.OffsetDateTime at = jdbc.sql(last).param("p", placeId).param("s", sourceId)
+                .query(java.time.OffsetDateTime.class).optional().orElse(null);
+        if (at == null) {
+            return true;
+        }
+        int days = sources.find(sourceId).map(io.destinationintel.source.SourceRepository.SourceRow::refreshIntervalDays).orElse(30);
+        return at.isBefore(java.time.OffsetDateTime.now().minusDays(Math.max(1, days)));
+    }
+
     @Override
     public String type() {
         return "wikivoyage_guide";
@@ -202,8 +216,14 @@ public class WikivoyageGuideHandler implements JobHandler {
             stats.put("run", run.summary());
 
             // Make sure supporting data exists for a destination that now has guide content.
-            jobs.enqueue("climate", "open-meteo", place.id(), Map.of(), "climate:" + place.id(), FOLLOW_UP_PRIORITY - 1, "system");
-            jobs.enqueue("place_image", "wikimedia-commons", place.id(), Map.of(), "place_image:" + place.id(), FOLLOW_UP_PRIORITY, "system");
+            // Only fetch what is missing or past its refresh interval. Ten-year weather averages barely change, and
+            // re-downloading them on every guide refresh gets the free weather service to refuse us (HTTP 429).
+            if (followUpDue(place.id(), "open-meteo")) {
+                jobs.enqueue("climate", "open-meteo", place.id(), Map.of(), "climate:" + place.id(), FOLLOW_UP_PRIORITY - 1, "system");
+            }
+            if (followUpDue(place.id(), "wikimedia-commons")) {
+                jobs.enqueue("place_image", "wikimedia-commons", place.id(), Map.of(), "place_image:" + place.id(), FOLLOW_UP_PRIORITY, "system");
+            }
             if (ai.active()) {
                 // Listings whose text is unchanged are skipped by the review, so this costs nothing on a no-op refresh.
                 jobs.enqueue("ai_review", null, place.id(), Map.of(), "ai_review:" + place.id(), AI_REVIEW_PRIORITY, "system");

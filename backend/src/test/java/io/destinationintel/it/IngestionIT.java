@@ -120,4 +120,34 @@ class IngestionIT extends IntegrationTest {
         assertThat(job.status()).isEqualTo("succeeded");
         assertThat(job.stats()).contains("graduated");
     }
+
+    @Test
+    void aGuideRefreshDoesNotRefetchWeatherOrPhotosThatAreStillFresh() {
+        UUID city = seedTestvillePlace();
+        ingestGuide(city);
+        jdbc.sql("DELETE FROM ingestion_job WHERE job_type IN ('climate', 'place_image')").update();
+        // Weather and a photo were fetched recently.
+        jdbc.sql("""
+                INSERT INTO place_source_sync (place_id, source_id, external_id, last_revision, last_synced_at, last_status)
+                VALUES (:p, 'open-meteo', 'x', 'x', now() - interval '10 days', 'succeeded')""").param("p", city).update();
+        jdbc.sql("""
+                INSERT INTO place_image (place_id, source_id, file_title, image_url, page_url, licence_name, fetched_at)
+                VALUES (:p, 'wikimedia-commons', 'x.jpg', 'https://upload.wikimedia.org/x.jpg', 'https://commons.wikimedia.org/wiki/File:x.jpg', 'CC0', now())""")
+                .param("p", city).update();
+
+        SourceStub.get().article("Testville", new SourceStub.Article(42, 1002, "2026-10-10T00:00:00Z", "testville-v2.wiki"));
+        try {
+            ingestGuide(city);
+        } finally {
+            SourceStub.get().article("Testville", new SourceStub.Article(42, 1001, "2026-10-01T00:00:00Z", "testville-v1.wiki"));
+        }
+        assertThat(count("SELECT count(*) FROM ingestion_job WHERE target_place_id = :p AND job_type IN ('climate', 'place_image')", city))
+                .as("ten-year weather averages and a recent photo are not fetched again").isZero();
+
+        jdbc.sql("UPDATE place_source_sync SET last_synced_at = now() - interval '400 days' WHERE place_id = :p AND source_id = 'open-meteo'")
+                .param("p", city).update();
+        ingestGuide(city);
+        assertThat(count("SELECT count(*) FROM ingestion_job WHERE target_place_id = :p AND job_type = 'climate'", city))
+                .as("but a year-old one is refreshed").isEqualTo(1);
+    }
 }

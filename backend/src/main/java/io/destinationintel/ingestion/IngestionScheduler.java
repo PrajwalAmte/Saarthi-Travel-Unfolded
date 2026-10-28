@@ -139,6 +139,7 @@ public class IngestionScheduler {
 
         int climate = refreshDue("open-meteo", "climate", "place_source_sync s WHERE s.source_id = 'open-meteo'", createdBy);
         plan.put("climateRefreshes", climate);
+        plan.put("climateMissing", climateMissing(createdBy));
 
         if (config.expansionPerDay() > 0 && config.runs("wikivoyage_guide")) {
             List<UUID> next = jdbc.sql("""
@@ -163,6 +164,26 @@ public class IngestionScheduler {
         }
         return plan;
     }
+
+    /** Guides that never got their weather data (for example after the weather service refused for a while). */
+    private int climateMissing(String createdBy) {
+        if (!config.runs("climate")) {
+            return 0;
+        }
+        List<UUID> missing = jdbc.sql("""
+                        SELECT p.id FROM place p JOIN destination_profile dp ON dp.place_id = p.id AND dp.coverage_status <> 'indexed'
+                        WHERE p.latitude IS NOT NULL
+                          AND NOT EXISTS (SELECT 1 FROM place_source_sync s WHERE s.place_id = p.id AND s.source_id = 'open-meteo')
+                          AND NOT EXISTS (SELECT 1 FROM ingestion_job j WHERE j.target_place_id = p.id AND j.job_type = 'climate'
+                                          AND j.status IN ('queued', 'running'))
+                        ORDER BY coalesce(p.sitelink_count, 0) DESC LIMIT :n""")
+                .param("n", CLIMATE_CATCH_UP_PER_RUN).query(UUID.class).list();
+        missing.forEach(id -> jobs.enqueue("climate", "open-meteo", id, Map.of(), "climate:" + id, 1, createdBy));
+        return missing.size();
+    }
+
+    /** Small batches, so catching up never trips the weather service's rate limit again. */
+    static final int CLIMATE_CATCH_UP_PER_RUN = 25;
 
     private int refreshDue(String sourceId, String jobType, String fromClause, String createdBy) {
         if (!config.runs(jobType)) {

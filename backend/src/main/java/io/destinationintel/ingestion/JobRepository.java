@@ -142,6 +142,9 @@ public class JobRepository {
                 .param("id", id).update();
     }
 
+    /** Marks a job's note as a pause, not an error, so it is shown as "waiting". */
+    public static final String WAITING_PREFIX = "Waiting: ";
+
     /** Puts a job back in the queue for later without spending one of its attempts. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void defer(UUID id, Duration delay, String reason) {
@@ -149,7 +152,7 @@ public class JobRepository {
                         UPDATE ingestion_job SET status = 'queued', attempts = greatest(attempts - 1, 0), started_at = NULL,
                                next_attempt_at = now() + make_interval(secs => :secs), last_error = :reason
                         WHERE id = :id""")
-                .param("secs", Math.max(60, delay.toSeconds())).param("reason", reason).param("id", id).update();
+                .param("secs", Math.max(60, delay.toSeconds())).param("reason", WAITING_PREFIX + reason).param("id", id).update();
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)

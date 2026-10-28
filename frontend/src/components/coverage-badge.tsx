@@ -1,4 +1,4 @@
-import { CircleDashed, CircleDot, Clock, Hammer, ShieldCheck } from "lucide-react";
+import { CircleDashed, CircleDot, Hammer, ShieldCheck } from "lucide-react";
 import type { CoverageStatus } from "@/lib/types";
 import { Badge } from "./ui/badge";
 
@@ -8,7 +8,9 @@ const META: Record<CoverageStatus, { label: string; tone: "neutral" | "accent" |
   building: { label: "Being built", tone: "neutral", Icon: Hammer },
   usable: { label: "Good coverage", tone: "accent", Icon: CircleDot },
   well_covered: { label: "Well covered", tone: "verified", Icon: ShieldCheck },
-  needs_refresh: { label: "Needs rechecking", tone: "stale", Icon: Clock },
+  // Enough content for a real guide; only its prices and hours are dated, and each of those already says how old it
+  // is where it appears. A guide-level warning would sit on nearly every guide, so it is not shown as one.
+  needs_refresh: { label: "Good coverage", tone: "accent", Icon: CircleDot },
 };
 
 /** One honest sentence on how much to lean on a guide at each maturity level. */
@@ -17,7 +19,8 @@ export const MATURITY_NOTE: Record<CoverageStatus, string> = {
   building: "This guide is still being built. Some sections are thin, so treat it as a starting point.",
   usable: "Good coverage from open travel sources. Details have not yet been confirmed by local contributors.",
   well_covered: "Well covered, and confirmed by contributors who know the place.",
-  needs_refresh: "Many prices and opening hours here are older than we would like. Check them before you rely on them.",
+  needs_refresh:
+    "Good coverage from open travel sources. Prices and opening hours change, so each one shows when it was last recorded.",
 };
 
 export function coverageLabel(status: CoverageStatus | null | undefined): string {

@@ -231,7 +231,7 @@ public class DestinationService {
             case "building" -> "Limited coverage";
             case "usable" -> "Usable";
             case "well_covered" -> "Well covered";
-            case "needs_refresh" -> "Needs refresh";
+            case "needs_refresh" -> "Good coverage";
             default -> status;
         };
     }
@@ -242,7 +242,7 @@ public class DestinationService {
             case "building" -> "This guide is still being built. What is shown is sourced, but some core sections are thin or missing.";
             case "usable" -> "Enough sourced information across the core sections to be useful. Check freshness labels on individual facts.";
             case "well_covered" -> "Every core section is deep and a meaningful share of it has been verified by contributors.";
-            case "needs_refresh" -> "There is enough information here, but much of it has not been observed or verified recently. Treat details as leads, and help by confirming what you know.";
+            case "needs_refresh" -> "Good coverage from open travel sources. Prices and opening hours change, so each one shows when it was last recorded; people who know the place can confirm them.";
             default -> "";
         };
     }

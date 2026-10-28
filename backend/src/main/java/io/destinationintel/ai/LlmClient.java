@@ -23,6 +23,13 @@ public interface LlmClient {
         }
     }
 
+    /** Every model is briefly over its per-minute limit; try again in a few minutes. */
+    class RateLimited extends RuntimeException {
+        public RateLimited(String message) {
+            super(message);
+        }
+    }
+
     /** The provider failed in a way that retrying now will not fix. */
     class AiUnavailable extends RuntimeException {
         public AiUnavailable(String message) {

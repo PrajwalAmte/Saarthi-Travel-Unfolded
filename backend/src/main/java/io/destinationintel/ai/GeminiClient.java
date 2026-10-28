@@ -73,6 +73,7 @@ public class GeminiClient implements LlmClient {
         }
         String lastError = "no model available";
         boolean anyBudget = false;
+        boolean minuteLimited = false;
         for (AiProperties.ModelSpec m : models) {
             if (retired.contains(m.name())) {
                 continue;
@@ -111,11 +112,18 @@ public class GeminiClient implements LlmClient {
                         retired.add(m.name());
                         break;
                     }
-                    if (status == 429 || status >= 500) {
-                        if (status == 429 && attempt == 1) {
-                            // Rate-limited: another model is a better bet than waiting on this one.
-                            break;
+                    if (status == 429) {
+                        if (dailyQuotaSpent(r.body())) {
+                            // Google says today's quota for this model is used (it may count requests we did not
+                            // make, such as trials); believe it and stop asking this model until its quota day ends.
+                            markSpent(m);
+                            log.info("Gemini {} reports its daily free quota is used; skipping it until the quota resets", m.name());
+                        } else {
+                            minuteLimited = true;
                         }
+                        break; // another model is a better bet than waiting on this one
+                    }
+                    if (status >= 500) {
                         long wait = props.retryBaseDelay().toMillis() * (long) Math.pow(3, attempt - 1);
                         log.warn("Gemini {} busy (HTTP {}), attempt {}/{}, waiting {} ms", m.name(), status, attempt, ATTEMPTS_PER_MODEL, wait);
                         sleep(wait);
@@ -133,6 +141,9 @@ public class GeminiClient implements LlmClient {
         }
         if (!anyBudget || everyModelSpent()) {
             throw new BudgetExhausted("Today's free AI requests are used up on every model");
+        }
+        if (minuteLimited) {
+            throw new RateLimited("Every model is over its per-minute limit right now");
         }
         throw new AiUnavailable(lastError);
     }
@@ -170,6 +181,19 @@ public class GeminiClient implements LlmClient {
             }
         }
         return true;
+    }
+
+    /** Google's 429 names the quota: a per-day one means the model is done for the day, a per-minute one passes. */
+    static boolean dailyQuotaSpent(String body) {
+        return body != null && (body.contains("PerDay") || body.contains("per day") || body.contains("RequestsPerDay"));
+    }
+
+    private void markSpent(AiProperties.ModelSpec m) {
+        jdbc.sql("""
+                        INSERT INTO ai_usage (day, model, requests) VALUES (""" + QUOTA_DAY + """
+                        , :m, :rpd)
+                        ON CONFLICT (day, model) DO UPDATE SET requests = greatest(ai_usage.requests, :rpd)""")
+                .param("m", m.name()).param("rpd", m.requestsPerDay()).update();
     }
 
     private void recordTokens(String model, int tokens) {

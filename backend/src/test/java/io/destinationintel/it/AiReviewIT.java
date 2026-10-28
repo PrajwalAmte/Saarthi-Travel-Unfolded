@@ -44,6 +44,8 @@ class AiReviewIT extends IntegrationTest {
         publishing.reset();
         SourceStub.get().geminiCalls.clear();
         SourceStub.get().busyModels.clear();
+        SourceStub.get().dailySpentModels.clear();
+        SourceStub.get().minuteLimitedModels.clear();
     }
 
     private UUID guideWithMisfiledFort() {
@@ -356,5 +358,30 @@ class AiReviewIT extends IntegrationTest {
         JobRow job = runReview(city);
         assertThat(job.status()).isEqualTo("succeeded");
         assertThat(jdbc.sql("SELECT DISTINCT model FROM ai_review").query(String.class).list()).doesNotContain("gone-model");
+    }
+
+    @Test
+    void whenGoogleSaysTheDailyQuotaIsUsedTheJobPausesUntilItResets() {
+        UUID city = guideWithMisfiledFort();
+        SourceStub.get().dailySpentModels.addAll(java.util.List.of("primary-model", "fallback-model"));
+        JobRow job = runReview(city);
+        assertThat(job.status()).as("paused, not failed").isEqualTo("queued");
+        assertThat(job.attempts()).isZero();
+        assertThat(job.lastError()).startsWith("Waiting: ").contains("used up on every model");
+        assertThat(job.nextAttemptAt()).isAfter(OffsetDateTime.now().plusMinutes(5));
+        assertThat(count("SELECT requests FROM ai_usage WHERE model = 'primary-model'"))
+                .as("Google's count is believed, so the model is not asked again today").isEqualTo(50);
+    }
+
+    @Test
+    void aPerMinuteLimitOnEveryModelPausesForAFewMinutes() {
+        UUID city = guideWithMisfiledFort();
+        SourceStub.get().minuteLimitedModels.addAll(java.util.List.of("primary-model", "fallback-model"));
+        JobRow job = runReview(city);
+        assertThat(job.status()).isEqualTo("queued");
+        assertThat(job.attempts()).isZero();
+        assertThat(job.lastError()).startsWith("Waiting: ").contains("per-minute");
+        assertThat(job.nextAttemptAt()).isBefore(OffsetDateTime.now().plusMinutes(10));
+        assertThat(count("SELECT coalesce(max(requests), 0) FROM ai_usage WHERE model = 'primary-model'")).as("not marked spent").isLessThan(50);
     }
 }

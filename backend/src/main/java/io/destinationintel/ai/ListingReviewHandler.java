@@ -242,6 +242,9 @@ public class ListingReviewHandler implements JobHandler {
             LlmClient.Answer answer;
             try {
                 answer = llm.generateJson(SYSTEM, prompt(place, state, batch), SCHEMA, LlmClient.Purpose.BULK);
+            } catch (LlmClient.RateLimited e) {
+                stats.put("reviewed", reviewed);
+                throw new Deferred(e.getMessage() + " (" + reviewed + " listings reviewed so far)", java.time.Duration.ofMinutes(5));
             } catch (LlmClient.BudgetExhausted e) {
                 // Keep what is done; the rest waits for tomorrow's quota.
                 stats.put("reviewed", reviewed);
@@ -274,6 +277,8 @@ public class ListingReviewHandler implements JobHandler {
         }
         try {
             stats.put("overview", overview.write(place, state));
+        } catch (LlmClient.RateLimited e) {
+            throw new Deferred(e.getMessage() + " (listings done; the destination overview waits)", java.time.Duration.ofMinutes(5));
         } catch (LlmClient.BudgetExhausted e) {
             throw new Deferred(e.getMessage() + " (listings done; the destination overview waits)", llm.untilQuotaReset());
         }

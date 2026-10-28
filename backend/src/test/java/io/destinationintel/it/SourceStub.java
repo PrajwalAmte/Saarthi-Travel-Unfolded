@@ -27,6 +27,10 @@ public final class SourceStub {
     public final AtomicInteger requests = new AtomicInteger();
     /** Model names of every Gemini call received, in order. */
     public final java.util.List<String> geminiCalls = new java.util.concurrent.CopyOnWriteArrayList<>();
+    /** Models whose free daily quota Google reports as used (429, per-day quota). */
+    public final java.util.Set<String> dailySpentModels = ConcurrentHashMap.newKeySet();
+    /** Models over their per-minute limit (429, per-minute quota). */
+    public final java.util.Set<String> minuteLimitedModels = ConcurrentHashMap.newKeySet();
     /** Models that answer 503 "high demand". */
     public final java.util.Set<String> busyModels = ConcurrentHashMap.newKeySet();
 
@@ -85,6 +89,17 @@ public final class SourceStub {
                 // A model Google has retired for new keys.
                 exchange.sendResponseHeaders(404, -1);
                 exchange.close();
+                return;
+            }
+            if (dailySpentModels.contains(model) || minuteLimitedModels.contains(model)) {
+                String quota = dailySpentModels.contains(model) ? "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+                        : "GenerateRequestsPerMinutePerProjectPerModel-FreeTier";
+                byte[] b = ("{\"error\":{\"code\":429,\"status\":\"RESOURCE_EXHAUSTED\",\"details\":[{\"violations\":[{\"quotaId\":\""
+                        + quota + "\"}]}]}}").getBytes(StandardCharsets.UTF_8);
+                exchange.sendResponseHeaders(429, b.length);
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(b);
+                }
                 return;
             }
             if (busyModels.contains(model)) {

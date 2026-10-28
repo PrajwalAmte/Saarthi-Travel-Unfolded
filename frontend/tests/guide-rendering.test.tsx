@@ -97,7 +97,8 @@ describe("coverage and section states", () => {
     rerender(<CoverageBadge status="building" />);
     expect(screen.getByText("Being built")).toBeInTheDocument();
     rerender(<CoverageBadge status="needs_refresh" />);
-    expect(screen.getByText("Needs rechecking")).toBeInTheDocument();
+    expect(screen.getByText("Good coverage")).toBeInTheDocument();
+    expect(screen.queryByText("Needs rechecking")).not.toBeInTheDocument();
     rerender(<CoverageBadge status="usable" />);
     expect(screen.getByText("Good coverage")).toBeInTheDocument();
     rerender(<CoverageBadge status="well_covered" />);

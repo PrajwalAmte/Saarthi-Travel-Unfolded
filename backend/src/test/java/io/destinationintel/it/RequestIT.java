@@ -185,4 +185,21 @@ class RequestIT extends IntegrationTest {
         assertThat(mail.sent.get(0).getSubject()).isEqualTo("A starter guide for Testville is ready");
         assertThat(mail.sent.get(0).getText()).contains("/d/testville").contains("/contribute/testville").contains("starter guide");
     }
+
+    @Test
+    void askingForAStateIsAnsweredWithItsPlacesGuidesRightAway() throws Exception {
+        UUID city = seedTestvillePlace();
+        ingestGuide(city);
+        JsonNode r = request("{\"query\":\"Test State\",\"email\":\"state@test.example\"}");
+        assertThat(r.path("status").asString()).isEqualTo("published");
+        assertThat(r.path("statusDetail").asString()).contains("Test State is a state").contains("1 place has one");
+        assertThat(r.path("destination").path("slug").asString()).isEqualTo("test-state");
+
+        JsonNode detail = body(mvc.perform(get("/api/destinations/test-state")).andReturn());
+        assertThat(detail.path("guidedPlaces").asInt()).isEqualTo(1);
+
+        assertThat(notifications.deliverDue()).as("no waiting for a guide that is its places").isEqualTo(1);
+        assertThat(mail.sent.get(mail.sent.size() - 1).getSubject()).isEqualTo("Guides for places in Test State");
+        assertThat(mail.sent.get(mail.sent.size() - 1).getText()).contains("/d/test-state").contains("pick a town or city");
+    }
 }

@@ -1,6 +1,6 @@
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
-import type { DestinationDetail } from "@/lib/types";
+import { type DestinationDetail, isHub } from "@/lib/types";
 import { CoverageBadge, MATURITY_NOTE } from "../coverage-badge";
 import { formatDate, kindLabel, safeHref } from "@/lib/utils";
 
@@ -40,8 +40,17 @@ export function DestinationHeader({ d }: { d: DestinationDetail }) {
           </div>
           <h1 className="mt-1 text-4xl font-semibold leading-tight sm:text-5xl">{d.name}</h1>
           <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-2">
-            <CoverageBadge status={d.coverage.status} />
-            <span>{MATURITY_NOTE[d.coverage.status]}</span>
+            {isHub(d) ? (
+              <span>
+                {d.guidedPlaces} {d.guidedPlaces === 1 ? "place" : "places"} in {d.name} {d.guidedPlaces === 1 ? "has" : "have"} a guide.
+                Pick one below.
+              </span>
+            ) : (
+              <>
+                <CoverageBadge status={d.coverage.status} />
+                <span>{MATURITY_NOTE[d.coverage.status]}</span>
+              </>
+            )}
             {d.guideAvailable ? (
               <Link href={`/d/${d.slug}/recheck`} className="text-accent underline">
                 Help check it

@@ -198,7 +198,15 @@ public class RequestService {
         String status;
         String detail;
         String coverage = coverageStatus(place.id());
-        if (coverage != null && !coverage.equals("indexed")) {
+        int guidedPlaces = guidedPlacesIn(place);
+        if (guidedPlaces > 0) {
+            // A state's guide is its places. The overview article is still imported for travel basics.
+            if (place.wikivoyageTitle() != null) {
+                job = jobs.enqueue("wikivoyage_guide", "wikivoyage-en", place.id(), Map.of(), "wikivoyage_guide:" + place.id(), GUIDE_PRIORITY, "request");
+            }
+            status = "published";
+            detail = hubDetail(place, guidedPlaces);
+        } else if (coverage != null && !coverage.equals("indexed")) {
             status = coverage.equals("building") ? "building" : "published";
             detail = coverage.equals("building") ? starterDetail(place) : "A guide is available.";
         } else if (place.wikivoyageTitle() != null) {
@@ -272,7 +280,11 @@ public class RequestService {
             if (p != null) {
                 String coverage = coverageStatus(p.id());
                 dest = new DestinationRef(p.slug(), p.name(), p.kind(), coverage == null ? "indexed" : coverage);
-                if (coverage != null && !coverage.equals("indexed")) {
+                int guidedPlaces = guidedPlacesIn(p);
+                if (guidedPlaces > 0) {
+                    status = "published";
+                    detail = hubDetail(p, guidedPlaces);
+                } else if (coverage != null && !coverage.equals("indexed")) {
                     status = coverage.equals("building") ? "building" : "published";
                     detail = coverage.equals("building") ? starterDetail(p) : "A guide is available.";
                 } else if ("failed".equals(jobStatus)) {
@@ -343,6 +355,24 @@ public class RequestService {
                         """)
                 .param("n", normalized).param("state", stateHint).query(UUID.class).list();
         return ids.size() == 1 ? places.findById(ids.get(0)) : Optional.empty();
+    }
+
+    /** For states and union territories: how many of their places have a guide (0 for anything else). */
+    int guidedPlacesIn(PlaceRow place) {
+        if (!io.destinationintel.place.DestinationService.HUB_KINDS.contains(place.kind())) {
+            return 0;
+        }
+        return jdbc.sql("""
+                        SELECT count(*) FROM place_relation r
+                        JOIN destination_profile dp ON dp.place_id = r.child_id AND dp.coverage_status <> 'indexed'
+                        WHERE r.parent_id = :p AND r.relation = 'in_state'""")
+                .param("p", place.id()).query(Long.class).single().intValue();
+    }
+
+    String hubDetail(PlaceRow place, int guidedPlaces) {
+        return place.name() + " is a " + ("union_territory".equals(place.kind()) ? "union territory" : "state")
+                + ", so its guide is the guides for the places in it: " + guidedPlaces
+                + (guidedPlaces == 1 ? " place has" : " places have") + " one. Start from the " + place.name() + " page.";
     }
 
     /**

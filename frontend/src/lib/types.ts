@@ -263,7 +263,14 @@ export type DestinationDetail = {
   childDestinations: { slug: string; name: string; kind: string; coverageStatus: CoverageStatus | null }[];
   recentlyClosed: { id: string; section: string; title: string; reason: string | null; reportedAt: string }[];
   inShort?: InShortItem[];
+  /** For a state or union territory: how many of its places have a guide. */
+  guidedPlaces?: number;
 };
+
+/** A state or union territory whose places have guides: its page is a hub, not a missing guide. */
+export function isHub(d: Pick<DestinationDetail, "kind" | "guidedPlaces">): boolean {
+  return (d.kind === "state" || d.kind === "union_territory") && (d.guidedPlaces ?? 0) > 0;
+}
 
 export type FactDetail = {
   fact: Fact;

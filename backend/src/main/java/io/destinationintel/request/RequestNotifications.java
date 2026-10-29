@@ -28,7 +28,7 @@ public class RequestNotifications {
     static final int RETENTION_DAYS = 90;
 
     private record Due(UUID id, String email, String trackingCode, String queryText, String requestStatus,
-                       String placeName, String placeSlug, String coverage, int attempts) {}
+                       String placeName, String placeSlug, String coverage, String placeKind, int attempts) {}
 
     private final JdbcClient jdbc;
     private final MailService mail;
@@ -85,14 +85,19 @@ public class RequestNotifications {
                 .param("d", RETENTION_DAYS).update();
         List<Due> due = jdbc.sql("""
                         SELECT n.id, n.email, r.tracking_code, r.query_text, r.status AS request_status,
-                               p.name AS place_name, p.slug AS place_slug, dp.coverage_status AS coverage, n.attempts
+                               p.name AS place_name, p.slug AS place_slug, dp.coverage_status AS coverage, p.kind AS place_kind,
+                               n.attempts
                         FROM request_notification n
                         JOIN destination_request r ON r.id = n.request_id
                         LEFT JOIN destination_profile dp ON dp.place_id = r.resolved_place_id
                         LEFT JOIN place p ON p.id = r.resolved_place_id
                         WHERE n.email IS NOT NULL AND n.next_attempt_at <= now()
                           AND (r.status = 'unresolvable'
-                               OR (dp.coverage_status IS NOT NULL AND dp.coverage_status <> 'indexed'))
+                               OR (dp.coverage_status IS NOT NULL AND dp.coverage_status <> 'indexed')
+                               OR (p.kind IN ('state', 'union_territory') AND EXISTS (
+                                     SELECT 1 FROM place_relation pr
+                                     JOIN destination_profile cdp ON cdp.place_id = pr.child_id AND cdp.coverage_status <> 'indexed'
+                                     WHERE pr.parent_id = p.id AND pr.relation = 'in_state')))
                         ORDER BY n.created_at LIMIT 20
                         FOR UPDATE OF n SKIP LOCKED""")
                 .query(Due.class).list();
@@ -131,6 +136,9 @@ public class RequestNotifications {
         if (notFound) {
             return "We could not find “" + d.queryText() + "” on Saarthi";
         }
+        if ("state".equals(d.placeKind()) || "union_territory".equals(d.placeKind())) {
+            return "Guides for places in " + d.placeName();
+        }
         return "building".equals(d.coverage()) ? "A starter guide for " + d.placeName() + " is ready"
                 : "Your guide for " + d.placeName() + " is ready";
     }
@@ -144,6 +152,11 @@ public class RequestNotifications {
                     + "Check the spelling, or request it again with the state added to narrow it down:\n\n"
                     + base + "/request?q=" + java.net.URLEncoder.encode(d.queryText(), java.nio.charset.StandardCharsets.UTF_8)
                     + footer;
+        }
+        if ("state".equals(d.placeKind()) || "union_territory".equals(d.placeKind())) {
+            return "Hello,\n\n" + d.placeName() + " is a " + ("state".equals(d.placeKind()) ? "state" : "union territory")
+                    + ", so its guide is made of guides for the places in it. Start here and pick a town or city:\n\n"
+                    + base + "/d/" + d.placeSlug() + footer;
         }
         if ("building".equals(d.coverage())) {
             return "Hello,\n\nWe imported everything open travel guides have on " + d.placeName() + ". There is not much yet, "

@@ -64,7 +64,11 @@ public class DestinationService {
             boolean guideAvailable,
             List<ChildDestination> childDestinations,
             List<ClosedEntry> recentlyClosed,
-            List<io.destinationintel.ai.AiContent.InShortItem> inShort) {}
+            List<io.destinationintel.ai.AiContent.InShortItem> inShort,
+            int guidedPlaces) {}
+
+    /** States and union territories are hubs: their guide is the set of guides for the places in them. */
+    public static final java.util.Set<String> HUB_KINDS = java.util.Set.of("state", "union_territory");
 
     public record ListItem(String slug, String name, String kind, String description, String stateName,
                            String coverageStatus, String imageUrl, String imageCredit, Long entryCount) {}
@@ -154,7 +158,9 @@ public class DestinationService {
         }
         CoverageView cov = coverage.profile(p.id()).map(this::coverageView).orElse(indexedCoverage());
         boolean guideAvailable = !cov.status().equals("indexed");
-        FactView summary = guideAvailable ? guide.summary(p.id()) : null;
+        int guidedPlaces = guidedPlacesIn(p.id());
+        boolean hub = HUB_KINDS.contains(p.kind()) && guidedPlaces > 0;
+        FactView summary = guideAvailable || hub ? guide.summary(p.id()) : null;
         Map<String, Integer> counts = guideAvailable ? guide.sectionCounts(p.id()) : Map.of();
         List<SourceRef> sources = guideAvailable ? sourceRefs(guide.sourcesUsed(p.id())) : sourceRefs(Set.of("wikidata"));
         OffsetDateTime lastSync = jdbc.sql("SELECT max(last_synced_at) FROM place_source_sync WHERE place_id = :id")
@@ -185,7 +191,16 @@ public class DestinationService {
                         : "https://en.wikivoyage.org/wiki/" + URLEncoder.encode(p.wikivoyageTitle().replace(' ', '_'),
                         StandardCharsets.UTF_8).replace("%2F", "/"),
                 parents, aliases, image(p.id()), cov, summary, counts, sources, lastSync, guideAvailable, children, closed,
-                guideAvailable ? ai.inShort(p.id()) : List.of());
+                guideAvailable ? ai.inShort(p.id()) : List.of(), guidedPlaces);
+    }
+
+    /** How many places within this one (a state's towns and cities) have a guide. */
+    public int guidedPlacesIn(UUID placeId) {
+        return jdbc.sql("""
+                        SELECT count(*) FROM place_relation r
+                        JOIN destination_profile dp ON dp.place_id = r.child_id AND dp.coverage_status <> 'indexed'
+                        WHERE r.parent_id = :p AND r.relation = 'in_state'""")
+                .param("p", placeId).query(Long.class).single().intValue();
     }
 
     private ImageView image(UUID placeId) {

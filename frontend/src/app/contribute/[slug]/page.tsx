@@ -2,9 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ContributeForm } from "@/components/contribute-form";
 import { getDestination } from "@/lib/destination";
+import { NOINDEX } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Contribute" };
+export const metadata = { title: "Contribute", robots: NOINDEX };
 
 export default async function ContributePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;

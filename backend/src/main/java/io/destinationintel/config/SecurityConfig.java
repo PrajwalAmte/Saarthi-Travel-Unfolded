@@ -62,7 +62,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/requests", "/api/requests/*/choose", "/api/requests/*/notify").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/search", "/api/destinations/**", "/api/facts/**",
-                                "/api/sources/**", "/api/requests/**", "/api/meta", "/api/status/**", "/api/quality/**").permitAll()
+                                "/api/sources/**", "/api/requests/**", "/api/meta", "/api/status/**", "/api/quality/**", "/api/trips/**").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/moderation/**").hasRole("TRUSTED")
                         .requestMatchers("/api/**").hasRole("CONTRIBUTOR")

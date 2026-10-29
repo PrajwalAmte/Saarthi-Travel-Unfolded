@@ -1,6 +1,7 @@
 import { AdminConsole } from "@/components/admin-console";
+import { NOINDEX } from "@/lib/seo";
 
-export const metadata = { title: "Operations" };
+export const metadata = { title: "Operations", robots: NOINDEX };
 
 export default function AdminPage() {
   return (

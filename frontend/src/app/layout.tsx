@@ -15,6 +15,13 @@ export const metadata: Metadata = {
   title: { default: "Saarthi — Travel Unfolded", template: "%s · Saarthi" },
   description:
     "Plan your trip anywhere in India: where to eat, where to stay, what to see, what things cost and how to get around.",
+  openGraph: { type: "website", siteName: "Saarthi — Travel Unfolded", locale: "en_IN" },
+  twitter: { card: "summary" },
+  // Ownership checks for Google Search Console and Bing Webmaster Tools (Bing's index also feeds ChatGPT search).
+  verification: {
+    ...(process.env.GOOGLE_SITE_VERIFICATION ? { google: process.env.GOOGLE_SITE_VERIFICATION } : {}),
+    ...(process.env.BING_SITE_VERIFICATION ? { other: { "msvalidate.01": process.env.BING_SITE_VERIFICATION } } : {}),
+  },
 };
 
 export const viewport: Viewport = {

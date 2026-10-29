@@ -6,9 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { apiGetOrNull } from "@/lib/server-api";
 import type { FactDetail } from "@/lib/types";
 import { formatDate, safeHref } from "@/lib/utils";
+import { NOINDEX } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Fact details" };
+export const metadata = { title: "Fact details", robots: NOINDEX };
 
 const CHANGE_LABEL: Record<string, string> = {
   initial: "First recorded",

@@ -94,10 +94,10 @@ public class RequestNotifications {
                         WHERE n.email IS NOT NULL AND n.next_attempt_at <= now()
                           AND (r.status = 'unresolvable'
                                OR (dp.coverage_status IS NOT NULL AND dp.coverage_status <> 'indexed')
-                               OR (p.kind IN ('state', 'union_territory') AND EXISTS (
+                               OR (p.kind IN ('state', 'union_territory', 'district') AND EXISTS (
                                      SELECT 1 FROM place_relation pr
                                      JOIN destination_profile cdp ON cdp.place_id = pr.child_id AND cdp.coverage_status <> 'indexed'
-                                     WHERE pr.parent_id = p.id AND pr.relation = 'in_state')))
+                                     WHERE pr.parent_id = p.id AND pr.relation IN ('in_state', 'in_district'))))
                         ORDER BY n.created_at LIMIT 20
                         FOR UPDATE OF n SKIP LOCKED""")
                 .query(Due.class).list();
@@ -136,7 +136,7 @@ public class RequestNotifications {
         if (notFound) {
             return "We could not find “" + d.queryText() + "” on Saarthi";
         }
-        if ("state".equals(d.placeKind()) || "union_territory".equals(d.placeKind())) {
+        if (io.destinationintel.place.DestinationService.HUB_KINDS.contains(d.placeKind())) {
             return "Guides for places in " + d.placeName();
         }
         return "building".equals(d.coverage()) ? "A starter guide for " + d.placeName() + " is ready"
@@ -153,8 +153,8 @@ public class RequestNotifications {
                     + base + "/request?q=" + java.net.URLEncoder.encode(d.queryText(), java.nio.charset.StandardCharsets.UTF_8)
                     + footer;
         }
-        if ("state".equals(d.placeKind()) || "union_territory".equals(d.placeKind())) {
-            return "Hello,\n\n" + d.placeName() + " is a " + ("state".equals(d.placeKind()) ? "state" : "union territory")
+        if (io.destinationintel.place.DestinationService.HUB_KINDS.contains(d.placeKind())) {
+            return "Hello,\n\n" + d.placeName() + " is " + io.destinationintel.place.DestinationService.hubNoun(d.placeKind())
                     + ", so its guide is made of guides for the places in it. Start here and pick a town or city:\n\n"
                     + base + "/d/" + d.placeSlug() + footer;
         }

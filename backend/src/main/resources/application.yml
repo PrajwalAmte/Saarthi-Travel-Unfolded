@@ -162,6 +162,10 @@ app:
     # per-destination jobs and leave the multi-GB map imports (osm_extract, overture_places, heritage_monuments,
     # wikidata_index) to a bigger machine; types left out are not planned here either.
     job-types: ${INGESTION_JOB_TYPES:}
+    # Focus areas, "slug:radiusKm" comma-separated (for example bengaluru:350). Each planner run queues guides for
+    # destinations within the radius that have a Wikivoyage article but no guide yet, nearest and best known first.
+    focus: ${INGESTION_FOCUS:}
+    focus-batch: ${INGESTION_FOCUS_BATCH:60}
   freshness:
     stable-days: 1095
     semi-stable-days: 365

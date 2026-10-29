@@ -1,4 +1,6 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+import { NOINDEX } from "@/lib/seo";
 import { CoverageBadge } from "@/components/coverage-badge";
 import { RequestForm } from "@/components/request-form";
 import { SearchBox } from "@/components/search-box";
@@ -10,7 +12,17 @@ import type { Page, SearchResult } from "@/lib/types";
 import { kindLabel } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Destinations" };
+export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
+  const sp = await searchParams;
+  const q = (Array.isArray(sp.q) ? sp.q[0] : sp.q)?.trim();
+  return q
+    ? { title: `Search: ${q}`, robots: NOINDEX }
+    : {
+        title: "Destinations in India with travel guides",
+        description: "Browse every Indian destination with a Saarthi guide: places to eat, stay and see, with sources and dates.",
+        alternates: { canonical: "/search" },
+      };
+}
 
 type ListItem = { slug: string; name: string; kind: string; description: string | null; stateName: string | null; coverageStatus: string | null };
 

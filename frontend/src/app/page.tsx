@@ -1,12 +1,16 @@
 import { ArrowRight, BadgeCheck, FileText, HeartHandshake } from "lucide-react";
 import Link from "next/link";
 import { HomeSearch } from "@/components/home-search";
+import { JsonLd } from "@/components/json-ld";
 import { ServiceWaking } from "@/components/service-waking";
+import { REPOSITORY_URL, SITE_NAME } from "@/lib/seo";
+import { siteUrl } from "@/lib/site-url";
 import { apiGet } from "@/lib/server-api";
 import type { Meta, Page } from "@/lib/types";
 import { safeHref } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
+export const metadata = { alternates: { canonical: "/" } };
 
 type Guide = {
   slug: string;
@@ -34,8 +38,25 @@ export default async function HomePage() {
   ]);
   const indexed = meta?.indexedDestinations ?? 0;
 
+  const base = siteUrl();
   return (
     <>
+      <JsonLd
+        data={{
+          "@context": "https://schema.org",
+          "@type": "WebSite",
+          name: SITE_NAME,
+          url: base.toString(),
+          inLanguage: "en-IN",
+          description: "A free, open-source travel guide to India in which every fact is linked to its source and dated.",
+          sameAs: [REPOSITORY_URL],
+          potentialAction: {
+            "@type": "SearchAction",
+            target: { "@type": "EntryPoint", urlTemplate: `${new URL("/search", base)}?q={search_term_string}` },
+            "query-input": "required name=search_term_string",
+          },
+        }}
+      />
       <section className="border-b border-line">
         <div className="container-page py-10 sm:py-16">
           <h1 className="max-w-3xl text-balance text-4xl font-semibold leading-[1.1] sm:text-5xl">

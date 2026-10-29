@@ -1,6 +1,6 @@
 import { MapPin } from "lucide-react";
 import Link from "next/link";
-import { type DestinationDetail, isHub } from "@/lib/types";
+import { type DestinationDetail, hubNoun, isHub } from "@/lib/types";
 import { googleMapsHref } from "@/lib/utils";
 import { CoverageBadge } from "../coverage-badge";
 import { Button } from "../ui/button";
@@ -15,8 +15,7 @@ export function IndexedOnly({ d }: { d: DestinationDetail }) {
         <div className="max-w-2xl space-y-3">
           {d.summary ? <p className="text-lg leading-relaxed text-ink-2">{d.summary.text}</p> : null}
           <p className="text-ink-2">
-            {d.name} is a {d.kind === "union_territory" ? "union territory" : "state"}, so its guide is made of guides for the
-            places in it. Pick a town or city below.
+            {d.name} is {hubNoun(d.kind)}, so its guide is made of guides for the places in it. Pick a town or city below.
           </p>
         </div>
       ) : (

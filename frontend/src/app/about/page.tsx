@@ -4,7 +4,12 @@ import { apiGet } from "@/lib/server-api";
 import type { Meta } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "How it works" };
+export const metadata = {
+  title: "How Saarthi checks its travel information",
+  description:
+    "Where every fact on Saarthi comes from, how it is dated and checked, and how locals can confirm or correct it.",
+  alternates: { canonical: "/about" },
+};
 
 const STEPS = [
   {

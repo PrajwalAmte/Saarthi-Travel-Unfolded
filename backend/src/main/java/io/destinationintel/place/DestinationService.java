@@ -67,8 +67,17 @@ public class DestinationService {
             List<io.destinationintel.ai.AiContent.InShortItem> inShort,
             int guidedPlaces) {}
 
-    /** States and union territories are hubs: their guide is the set of guides for the places in them. */
-    public static final java.util.Set<String> HUB_KINDS = java.util.Set.of("state", "union_territory");
+    /** States, union territories and districts are hubs: their guide is the set of guides for the places in them. */
+    public static final java.util.Set<String> HUB_KINDS = java.util.Set.of("state", "union_territory", "district");
+
+    /** "a state", "a union territory", "a district". */
+    public static String hubNoun(String kind) {
+        return switch (kind) {
+            case "union_territory" -> "a union territory";
+            case "district" -> "a district";
+            default -> "a state";
+        };
+    }
 
     public record ListItem(String slug, String name, String kind, String description, String stateName,
                            String coverageStatus, String imageUrl, String imageCredit, Long entryCount) {}
@@ -194,12 +203,74 @@ public class DestinationService {
                 guideAvailable ? ai.inShort(p.id()) : List.of(), guidedPlaces);
     }
 
+    /** One page group for the sitemap: a guide (with the tabs that have content) or a state hub. */
+    public record SitemapEntry(String slug, String kind, java.time.OffsetDateTime lastModified, List<String> tabs) {}
+
+    /**
+     * Every page worth indexing: destinations with a guide, the tabs of theirs that have content, and states or union
+     * territories that are hubs of guides. Places without a guide are left out (and marked noindex on their pages).
+     */
+    public List<SitemapEntry> sitemap() {
+        List<SitemapEntry> out = new ArrayList<>(jdbc.sql("""
+                        SELECT p.slug, p.kind,
+                               greatest(max(e.updated_at), (SELECT max(f.updated_at) FROM fact f WHERE f.destination_id = p.id AND f.status = 'published')) AS last_modified,
+                               count(*) FILTER (WHERE e.section IN ('eat', 'drink')) AS eat,
+                               count(*) FILTER (WHERE e.section = 'stay') AS stay,
+                               count(*) FILTER (WHERE e.section IN ('see', 'do', 'buy')) AS explore,
+                               count(*) FILTER (WHERE e.section = 'neighbourhood') AS neighbourhoods,
+                               EXISTS (SELECT 1 FROM fact f WHERE f.destination_id = p.id AND f.status = 'published' AND f.kind = 'price') AS budget,
+                               EXISTS (SELECT 1 FROM fact f WHERE f.destination_id = p.id AND f.status = 'published' AND f.entry_id IS NULL
+                                       AND f.section IN ('getting_around', 'getting_there')) AS getting_around,
+                               EXISTS (SELECT 1 FROM fact f WHERE f.destination_id = p.id AND f.status = 'published' AND f.entry_id IS NULL
+                                       AND f.section IN ('tips', 'practical')) AS tips
+                        FROM place p
+                        JOIN destination_profile dp ON dp.place_id = p.id AND dp.coverage_status <> 'indexed'
+                        LEFT JOIN guide_entry e ON e.destination_id = p.id AND e.status = 'published'
+                        WHERE p.is_destination AND p.lifecycle_status = 'active'
+                        GROUP BY p.id, p.slug, p.kind
+                        ORDER BY coalesce(p.sitelink_count, 0) DESC, p.slug""")
+                .query((rs, i) -> {
+                    List<String> tabs = new ArrayList<>();
+                    for (String[] t : new String[][] {{"eat", "eat"}, {"stay", "stay"}, {"explore", "explore"},
+                            {"neighbourhoods", "neighbourhoods"}}) {
+                        if (rs.getLong(t[0]) > 0) {
+                            tabs.add(t[1]);
+                        }
+                    }
+                    if (rs.getBoolean("budget")) {
+                        tabs.add("budget");
+                    }
+                    if (rs.getBoolean("getting_around")) {
+                        tabs.add("getting-around");
+                    }
+                    if (rs.getBoolean("tips")) {
+                        tabs.add("tips");
+                    }
+                    return new SitemapEntry(rs.getString("slug"), rs.getString("kind"),
+                            rs.getObject("last_modified", java.time.OffsetDateTime.class), tabs);
+                }).list());
+        out.addAll(jdbc.sql("""
+                        SELECT s.slug, s.kind, max(dp.computed_at) AS last_modified
+                        FROM place s
+                        JOIN place_relation r ON r.parent_id = s.id AND r.relation IN ('in_state', 'in_district')
+                        JOIN place c ON c.id = r.child_id AND c.kind NOT IN ('district', 'neighbourhood')
+                        JOIN destination_profile dp ON dp.place_id = r.child_id AND dp.coverage_status <> 'indexed'
+                        WHERE s.kind IN ('state', 'union_territory', 'district') AND s.lifecycle_status = 'active'
+                        GROUP BY s.id, s.slug, s.kind
+                        ORDER BY s.slug""")
+                .query((rs, i) -> new SitemapEntry(rs.getString("slug"), rs.getString("kind"),
+                        rs.getObject("last_modified", java.time.OffsetDateTime.class), List.of()))
+                .list());
+        return out;
+    }
+
     /** How many places within this one (a state's towns and cities) have a guide. */
     public int guidedPlacesIn(UUID placeId) {
         return jdbc.sql("""
-                        SELECT count(*) FROM place_relation r
+                        SELECT count(DISTINCT r.child_id) FROM place_relation r
+                        JOIN place c ON c.id = r.child_id AND c.kind NOT IN ('district', 'neighbourhood')
                         JOIN destination_profile dp ON dp.place_id = r.child_id AND dp.coverage_status <> 'indexed'
-                        WHERE r.parent_id = :p AND r.relation = 'in_state'""")
+                        WHERE r.parent_id = :p AND r.relation IN ('in_state', 'in_district')""")
                 .param("p", placeId).query(Long.class).single().intValue();
     }
 

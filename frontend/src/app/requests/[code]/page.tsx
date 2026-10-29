@@ -8,9 +8,10 @@ import { Notice } from "@/components/ui/notice";
 import { apiGetOrNull } from "@/lib/server-api";
 import type { RequestView } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
+import { NOINDEX } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Request status" };
+export const metadata = { title: "Request status", robots: NOINDEX };
 
 const STEPS = ["Received", "Located in the index", "Content ingested", "Quality checked"];
 

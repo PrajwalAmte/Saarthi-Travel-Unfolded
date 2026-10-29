@@ -10,7 +10,10 @@ import { PreferenceBar } from "@/components/guide/preference-bar";
 import { SectionList } from "@/components/guide/section-list";
 import { Badge } from "@/components/ui/badge";
 import { Notice } from "@/components/ui/notice";
+import { JsonLd } from "@/components/json-ld";
 import { getDestination } from "@/lib/destination";
+import { breadcrumbJsonLd, destinationCrumbs, NOINDEX, tabDescription, tabTitle } from "@/lib/seo";
+import { siteUrl } from "@/lib/site-url";
 import { parsePreferences, preferencesToParams } from "@/lib/preferences";
 import { apiGet } from "@/lib/server-api";
 import type { BudgetView, FactSectionView, NeighbourhoodSectionView, SectionView } from "@/lib/types";
@@ -35,13 +38,51 @@ type Props = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-export async function generateMetadata({ params }: Props) {
+export async function generateMetadata({ params, searchParams }: Props) {
   const { slug, tab } = await params;
   const d = await getDestination(slug);
-  return { title: d && (TABS as readonly string[]).includes(tab) ? `${TITLES[tab as Tab]} in ${d.name}` : "Not found" };
+  if (!d || !(TABS as readonly string[]).includes(tab)) return { title: "Not found", robots: NOINDEX };
+  const sp = await searchParams;
+  const page = Number.parseInt((Array.isArray(sp.page) ? sp.page[0] : sp.page) ?? "0", 10);
+  const title = tabTitle(tab, d);
+  const description = tabDescription(tab, d);
+  // Preference and filter parameters reorder the same listings, so they all point at one canonical page.
+  const canonical = `/d/${slug}/${tab}${Number.isFinite(page) && page > 0 ? `?page=${page}` : ""}`;
+  return {
+    title: Number.isFinite(page) && page > 0 ? `${title} (page ${page + 1})` : title,
+    description,
+    alternates: { canonical },
+    // The map tab lists raw map records, not guide content.
+    ...(tab === "map" || !d.guideAvailable ? { robots: NOINDEX } : {}),
+    openGraph: {
+      type: "article",
+      title,
+      description,
+      url: canonical,
+      ...(d.image?.url ? { images: [{ url: d.image.url, alt: d.name }] } : {}),
+    },
+    twitter: { card: d.image?.url ? "summary_large_image" : "summary", title, description },
+  };
 }
 
-export default async function TabPage({ params, searchParams }: Props) {
+function TabCrumbs({ d, tab }: { d: NonNullable<Awaited<ReturnType<typeof getDestination>>>; tab: Tab }) {
+  return (
+    <JsonLd data={breadcrumbJsonLd(siteUrl(), [...destinationCrumbs(d), { name: TITLES[tab], path: `/d/${d.slug}/${tab}` }])} />
+  );
+}
+
+export default async function TabPage(props: Props) {
+  const { slug, tab } = await props.params;
+  const d = (TABS as readonly string[]).includes(tab) ? await getDestination(slug) : null;
+  return (
+    <>
+      {d ? <TabCrumbs d={d} tab={tab as Tab} /> : null}
+      <TabContent {...props} />
+    </>
+  );
+}
+
+async function TabContent({ params, searchParams }: Props) {
   const { slug, tab } = await params;
   if (!(TABS as readonly string[]).includes(tab)) notFound();
   const d = await getDestination(slug);

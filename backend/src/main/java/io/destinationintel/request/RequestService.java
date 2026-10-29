@@ -357,20 +357,21 @@ public class RequestService {
         return ids.size() == 1 ? places.findById(ids.get(0)) : Optional.empty();
     }
 
-    /** For states and union territories: how many of their places have a guide (0 for anything else). */
+    /** For states, union territories and districts: how many of their places have a guide (0 for anything else). */
     int guidedPlacesIn(PlaceRow place) {
         if (!io.destinationintel.place.DestinationService.HUB_KINDS.contains(place.kind())) {
             return 0;
         }
         return jdbc.sql("""
-                        SELECT count(*) FROM place_relation r
+                        SELECT count(DISTINCT r.child_id) FROM place_relation r
+                        JOIN place c ON c.id = r.child_id AND c.kind NOT IN ('district', 'neighbourhood')
                         JOIN destination_profile dp ON dp.place_id = r.child_id AND dp.coverage_status <> 'indexed'
-                        WHERE r.parent_id = :p AND r.relation = 'in_state'""")
+                        WHERE r.parent_id = :p AND r.relation IN ('in_state', 'in_district')""")
                 .param("p", place.id()).query(Long.class).single().intValue();
     }
 
     String hubDetail(PlaceRow place, int guidedPlaces) {
-        return place.name() + " is a " + ("union_territory".equals(place.kind()) ? "union territory" : "state")
+        return place.name() + " is " + io.destinationintel.place.DestinationService.hubNoun(place.kind())
                 + ", so its guide is the guides for the places in it: " + guidedPlaces
                 + (guidedPlaces == 1 ? " place has" : " places have") + " one. Start from the " + place.name() + " page.";
     }

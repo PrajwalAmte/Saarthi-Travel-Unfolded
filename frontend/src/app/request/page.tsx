@@ -4,7 +4,7 @@ import type { Meta } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Request a destination" };
+export const metadata = { title: "Request a destination", alternates: { canonical: "/request" } };
 
 type Props = { searchParams: Promise<Record<string, string | string[] | undefined>> };
 

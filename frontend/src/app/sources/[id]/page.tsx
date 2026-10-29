@@ -54,7 +54,7 @@ type Props = { params: Promise<{ id: string }> };
 
 export async function generateMetadata({ params }: Props) {
   const { id } = await params;
-  return { title: `Quality report: ${id}` };
+  return { title: `Quality report: ${id}`, alternates: { canonical: `/sources/${id}` } };
 }
 
 function fmt(n: unknown) {

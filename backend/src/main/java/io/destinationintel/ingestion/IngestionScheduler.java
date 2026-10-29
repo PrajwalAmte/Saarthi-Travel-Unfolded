@@ -159,10 +159,52 @@ public class IngestionScheduler {
             plan.put("expansion", next.size());
         }
 
+        plan.put("focus", focusArea(createdBy));
+
         if (config.runs("coverage_refresh")) {
             jobs.enqueue("coverage_refresh", null, null, Map.of(), "coverage_refresh:all", 0, createdBy);
         }
         return plan;
+    }
+
+    /**
+     * Fills the guides around each focus city: destinations within its radius that have a Wikivoyage article but no
+     * guide, nearest first and then best known, a batch per run. Places already imported (even if the article gave
+     * no listings) are not tried again, so the area converges instead of looping.
+     */
+    Map<String, Integer> focusArea(String createdBy) {
+        Map<String, Integer> out = new LinkedHashMap<>();
+        if (!config.runs("wikivoyage_guide")) {
+            return out;
+        }
+        for (String spec : config.focus()) {
+            String[] f = spec.split(":");
+            String slug = f[0].trim();
+            double km;
+            try {
+                km = f.length > 1 ? Double.parseDouble(f[1].trim()) : 300;
+            } catch (NumberFormatException e) {
+                log.warn("Ignoring focus area {}: radius is not a number", spec);
+                continue;
+            }
+            List<UUID> next = jdbc.sql("""
+                            WITH centre AS (SELECT geog FROM place WHERE slug = :slug AND geog IS NOT NULL)
+                            SELECT p.id FROM place p CROSS JOIN centre
+                            WHERE p.is_destination AND p.lifecycle_status = 'active' AND p.geog IS NOT NULL
+                              AND p.wikivoyage_title IS NOT NULL AND p.wikivoyage_title NOT LIKE '%/%'
+                              AND p.kind IN ('city', 'town', 'village', 'park', 'island', 'attraction', 'district')
+                              AND ST_DWithin(p.geog, centre.geog, :metres)
+                              AND NOT EXISTS (SELECT 1 FROM place_source_sync s WHERE s.place_id = p.id AND s.source_id = 'wikivoyage-en')
+                              AND NOT EXISTS (SELECT 1 FROM ingestion_job j WHERE j.target_place_id = p.id AND j.job_type = 'wikivoyage_guide'
+                                              AND (j.status IN ('queued', 'running') OR j.created_at > now() - interval '7 days'))
+                            ORDER BY ST_Distance(p.geog, centre.geog) <= :near DESC, coalesce(p.sitelink_count, 0) DESC, p.name
+                            LIMIT :n""")
+                    .param("slug", slug).param("metres", km * 1000).param("near", Math.min(km, 150) * 1000)
+                    .param("n", config.focusBatch()).query(UUID.class).list();
+            next.forEach(id -> jobs.enqueue("wikivoyage_guide", "wikivoyage-en", id, Map.of(), "wikivoyage_guide:" + id, 20, createdBy));
+            out.put(slug, next.size());
+        }
+        return out;
     }
 
     /** Guides that never got their weather data (for example after the weather service refused for a while). */

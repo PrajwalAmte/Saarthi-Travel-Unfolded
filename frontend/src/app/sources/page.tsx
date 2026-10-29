@@ -6,7 +6,11 @@ import type { IngestionStatus } from "@/lib/types";
 import { formatDate, safeHref } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Sources and licences" };
+export const metadata = {
+  title: "Sources and licences",
+  description: "Every open data source behind Saarthi, its licence, how often it is refreshed and whether its last import passed the quality checks.",
+  alternates: { canonical: "/sources" },
+};
 
 const RUN_STATUS: Record<string, string> = {
   running: "running",

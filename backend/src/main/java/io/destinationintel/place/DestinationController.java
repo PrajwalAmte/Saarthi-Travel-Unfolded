@@ -68,6 +68,13 @@ public class DestinationController {
                 .body(search.search(q, limit == null ? 8 : limit));
     }
 
+    @GetMapping("/destinations/sitemap")
+    @Operation(summary = "Pages worth indexing: guides with the tabs that have content, and state hubs (feeds sitemap.xml)")
+    public ResponseEntity<List<DestinationService.SitemapEntry>> sitemap() {
+        return ResponseEntity.ok().cacheControl(org.springframework.http.CacheControl.maxAge(java.time.Duration.ofHours(1)).cachePublic())
+                .body(destinations.sitemap());
+    }
+
     @GetMapping("/destinations")
     @Operation(summary = "Browse indexed destinations, optionally only those with guide content or of one kind")
     public ResponseEntity<PageResponse<DestinationService.ListItem>> list(

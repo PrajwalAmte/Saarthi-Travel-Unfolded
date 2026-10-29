@@ -174,4 +174,34 @@ class GuideApiIT extends IntegrationTest {
                 .andExpect(jsonPath("$.code").value("validation_failed"));
         mvc.perform(get("/api/facts/not-a-uuid")).andExpect(status().isBadRequest());
     }
+
+    @Test
+    void sitemapListsGuidesWithTheirTabsAndStateHubsButNotEmptyPlaces() throws Exception {
+        UUID city = seedTestvillePlace();
+        ingestGuide(city);
+        tx.executeWithoutResult(st -> places.upsertFromWikidata(new PlaceUpsert("Q900000020", "Emptyville", "town", "town in Test State, India",
+                12.0, 76.0, 10_000L, null, null, 1, true, "Test State")));
+        // A district whose town has a guide is a hub too ("Coorg" is Kodagu district, whose guide is Madikeri's).
+        tx.executeWithoutResult(st -> {
+            UUID district = places.upsertFromWikidata(new PlaceUpsert("Q900000021", "Test District", "district", "district of Test State",
+                    12.3, 76.6, 500_000L, null, null, 5, true, "Test State"));
+            places.addRelation(city, district, "in_district", "wikidata");
+        });
+        JsonNode entries = body(mvc.perform(get("/api/destinations/sitemap")).andExpect(status().isOk()).andReturn());
+        List<String> slugs = new ArrayList<>();
+        JsonNode testville = null;
+        for (JsonNode e : entries) {
+            slugs.add(e.path("slug").asString());
+            if (e.path("slug").asString().equals("testville")) {
+                testville = e;
+            }
+        }
+        assertThat(slugs).contains("testville", "test-state", "test-district").doesNotContain("emptyville");
+        assertThat(body(mvc.perform(get("/api/destinations/test-district")).andReturn()).path("guidedPlaces").asInt()).isEqualTo(1);
+        assertThat(testville.path("lastModified").isNull()).isFalse();
+        List<String> tabs = new ArrayList<>();
+        testville.path("tabs").forEach(t -> tabs.add(t.asString()));
+        assertThat(tabs).contains("eat", "stay", "explore");
+        mvc.perform(get("/api/destinations/testville")).andExpect(status().isOk());
+    }
 }

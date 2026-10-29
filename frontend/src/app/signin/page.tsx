@@ -1,6 +1,7 @@
 import { SignInForm } from "@/components/signin-form";
+import { NOINDEX } from "@/lib/seo";
 
-export const metadata = { title: "Contributor sign-in" };
+export const metadata = { title: "Contributor sign-in", robots: NOINDEX };
 
 type Props = { searchParams: Promise<Record<string, string | string[] | undefined>> };
 

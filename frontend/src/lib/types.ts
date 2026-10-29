@@ -267,9 +267,16 @@ export type DestinationDetail = {
   guidedPlaces?: number;
 };
 
-/** A state or union territory whose places have guides: its page is a hub, not a missing guide. */
+const HUB_KINDS = new Set(["state", "union_territory", "district"]);
+
+/** A state, union territory or district whose places have guides: its page is a hub, not a missing guide. */
 export function isHub(d: Pick<DestinationDetail, "kind" | "guidedPlaces">): boolean {
-  return (d.kind === "state" || d.kind === "union_territory") && (d.guidedPlaces ?? 0) > 0;
+  return HUB_KINDS.has(d.kind) && (d.guidedPlaces ?? 0) > 0;
+}
+
+/** "a state", "a union territory", "a district". */
+export function hubNoun(kind: string): string {
+  return kind === "union_territory" ? "a union territory" : kind === "district" ? "a district" : "a state";
 }
 
 export type FactDetail = {
@@ -520,4 +527,37 @@ export type ApiProblem = {
   errors?: { field: string; message: string }[];
   candidates?: { id: string; title: string; section: string }[];
   retryAfterSeconds?: number;
+};
+
+export type TripSource = { name: string; url: string | null } | null;
+
+export type Trip = {
+  slug: string;
+  name: string;
+  kind: string;
+  state: string | null;
+  distanceKm: number;
+  coverageStatus: CoverageStatus;
+  placesToEat: number;
+  placesToStay: number;
+  thingsToDo: number;
+  knownFor: string | null;
+  knownForSource: TripSource;
+  gettingThere: string | null;
+  gettingThereSource: TripSource;
+  comfortableMonths: number[];
+  climatePeriod: string | null;
+  imageUrl: string | null;
+  imageCredit: string | null;
+};
+
+/** Places with guides within a weekend's reach of a city, from GET /api/trips/weekend-from/{slug}. */
+export type WeekendTrips = {
+  originSlug: string;
+  originName: string;
+  maxKm: number;
+  total: number;
+  generatedAt: string;
+  bands: { label: string; fromKm: number; toKm: number; trips: Trip[] }[];
+  method: string[];
 };

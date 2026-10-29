@@ -67,11 +67,15 @@ public record AppProperties(
             String overtureRelease,
             double overtureRadiusKm,
             double overtureMinConfidence,
-            List<String> jobTypes) {
+            List<String> jobTypes,
+            List<String> focus,
+            int focusBatch) {
 
         public Ingestion {
             seedGuides = seedGuides == null ? List.of()
                     : seedGuides.stream().filter(StringUtils::hasText).map(String::trim).toList();
+            focus = focus == null ? List.of() : focus.stream().filter(StringUtils::hasText).map(String::trim).toList();
+            focusBatch = focusBatch <= 0 ? 60 : focusBatch;
             jobTypes = jobTypes == null ? List.of()
                     : jobTypes.stream().filter(StringUtils::hasText).map(String::trim).toList();
         }

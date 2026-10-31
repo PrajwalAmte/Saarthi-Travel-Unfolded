@@ -43,6 +43,8 @@ class FocusAreaIT extends IntegrationTest {
         Map<String, Object> plan = scheduler.planRefreshes("scheduler");
         assertThat(plan.get("focus")).isEqualTo(Map.of("testville", 1));
         assertThat(queuedGuides()).containsExactly("Hillstation");
+        assertThat(jdbc.sql("SELECT count(*) FROM ingestion_job WHERE job_type = 'road_routes' AND status = 'queued'")
+                .query(Integer.class).single()).as("drive times for the weekend-trips page are planned too").isEqualTo(1);
 
         scheduler.planRefreshes("scheduler");
         assertThat(queuedGuides()).as("not queued twice").containsExactly("Hillstation");

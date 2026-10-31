@@ -49,7 +49,7 @@ public class AdminController {
                           String lastError, Map<String, Object> stats, String createdBy, OffsetDateTime createdAt) {}
 
     public record EnqueueBody(
-            @NotBlank @Pattern(regexp = "wikidata_index|wikivoyage_guide|climate|place_image|coverage_refresh|osm_extract|overture_places|heritage_monuments|quality_evaluation|match_resolution") String type,
+            @NotBlank @Pattern(regexp = "wikidata_index|wikivoyage_guide|climate|place_image|coverage_refresh|osm_extract|overture_places|heritage_monuments|quality_evaluation|match_resolution|road_routes|nearest_transport|air_quality|fact_check") String type,
             @Pattern(regexp = "^[a-z0-9-]{1,40}$") String sourceId,
             @Size(max = 140) String placeSlug,
             boolean force) {}
@@ -118,7 +118,8 @@ public class AdminController {
         if (body.placeSlug() != null && !body.placeSlug().isBlank()) {
             place = places.findBySlug(body.placeSlug().trim()).orElseThrow(() -> ApiException.notFound("Destination"));
         }
-        boolean needsPlace = body.type().equals("wikivoyage_guide") || body.type().equals("climate") || body.type().equals("place_image");
+        boolean needsPlace = java.util.Set.of("wikivoyage_guide", "climate", "place_image", "road_routes", "air_quality", "fact_check")
+                .contains(body.type());
         if (needsPlace && place == null) {
             throw ApiException.badRequest("place_required", "This job type needs a destination.");
         }
@@ -130,11 +131,18 @@ public class AdminController {
             case "osm_extract" -> "openstreetmap";
             case "overture_places" -> "overture-places";
             case "heritage_monuments" -> "asi-heritage";
+            case "road_routes" -> "osrm";
+            case "nearest_transport" -> "ourairports";
+            case "air_quality" -> "open-meteo-air";
+            case "fact_check" -> "official-website";
             default -> null;
         };
         Map<String, Object> params = new java.util.LinkedHashMap<>();
         if (body.force()) {
             params.put("force", true);
+        }
+        if (body.type().equals("road_routes")) {
+            params.put("radiusKm", 350);
         }
         if (body.type().equals("quality_evaluation")) {
             if (body.sourceId() == null || sources.find(body.sourceId()).isEmpty()) {

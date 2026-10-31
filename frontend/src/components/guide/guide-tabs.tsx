@@ -1,5 +1,6 @@
 "use client";
 
+import { CalendarDays } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -9,7 +10,7 @@ export const TABS = [
   { key: "eat", label: "Eat", count: "eat" },
   { key: "stay", label: "Stay", count: "stay" },
   { key: "explore", label: "Explore", count: "explore" },
-  { key: "neighbourhoods", label: "Neighbourhoods", count: "neighbourhoods" },
+  { key: "neighbourhoods", label: "Areas", count: "neighbourhoods" },
   { key: "budget", label: "Budget", count: "budget" },
   { key: "getting-around", label: "Getting around", count: "getting-around" },
   { key: "tips", label: "Local tips", count: "tips" },
@@ -18,7 +19,7 @@ export const TABS = [
 
 const KEEP = ["food", "budget", "comfort", "interests"];
 
-export function GuideTabs({ slug, counts }: { slug: string; counts: Record<string, number> }) {
+export function GuideTabs({ slug, counts, weekendTrips = null }: { slug: string; counts: Record<string, number>; weekendTrips?: number | null }) {
   const pathname = usePathname();
   const params = useSearchParams();
   const keep = new URLSearchParams();
@@ -52,6 +53,18 @@ export function GuideTabs({ slug, counts }: { slug: string; counts: Record<strin
             </li>
           );
         })}
+        {weekendTrips ? (
+          <li>
+            <Link
+              href={`/trips/weekend-from/${slug}`}
+              className="-mb-px inline-flex h-11 items-center gap-1.5 border-b-2 border-transparent px-3 text-sm font-medium text-accent hover:underline"
+            >
+              <CalendarDays className="size-4" aria-hidden />
+              Weekend trips
+              <span className="rounded-sm bg-accent-soft px-1 text-xs">{weekendTrips}</span>
+            </Link>
+          </li>
+        ) : null}
       </ul>
     </nav>
   );

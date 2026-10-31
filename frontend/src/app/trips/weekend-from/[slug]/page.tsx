@@ -6,7 +6,7 @@ import { JsonLd } from "@/components/json-ld";
 import { apiGetOrNull } from "@/lib/server-api";
 import { siteUrl } from "@/lib/site-url";
 import { breadcrumbJsonLd, NOINDEX } from "@/lib/seo";
-import { MIN_TRIPS, monthRanges } from "@/lib/trips";
+import { driveTime, MIN_TRIPS, monthRanges } from "@/lib/trips";
 import type { TripSource, WeekendTrips } from "@/lib/types";
 import { formatDate, safeHref } from "@/lib/utils";
 
@@ -22,7 +22,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const w = await load(slug);
   if (!w || w.total < MIN_TRIPS) return { title: "Not found", robots: NOINDEX };
   const title = `Weekend trips from ${w.originName}: ${w.total} places within ${w.maxKm} km`;
-  const description = `${w.total} places within ${w.maxKm} km of ${w.originName} with travel guides, by distance: what each is known for, how to get there and the months its weather is mildest, all from cited sources.`;
+  const description = `${w.total} places within ${w.maxKm} km of ${w.originName} with travel guides, by ${w.bandsBy === "drive_time" ? "drive time" : "distance"}: what each is known for, how to get there and the months its weather is mildest, all from cited sources.`;
   return {
     title,
     description,
@@ -81,13 +81,13 @@ export default async function WeekendTripsPage({ params }: { params: Promise<{ s
       </p>
       <h1 className="mt-1 text-4xl font-semibold leading-tight sm:text-5xl">Weekend trips from {w.originName}</h1>
       <p className="mt-3 max-w-3xl text-lg text-ink-2">
-        {w.total} places within {w.maxKm} km that have a guide on Saarthi, nearest first. Each note is quoted from the place&apos;s
+        {w.total} places within {w.maxKm} km that have a guide on Saarthi, {w.bandsBy === "drive_time" ? "shortest drive first" : "nearest first"}. Each note is quoted from the place&apos;s
         guide with its source; weather months come from ten years of averages. Updated {formatDate(w.generatedAt)}.
       </p>
 
       {w.bands.map((band) => (
-        <section key={band.label} className="mt-10" aria-labelledby={`band-${band.toKm}`}>
-          <h2 id={`band-${band.toKm}`} className="text-2xl font-semibold">
+        <section key={band.key} className="mt-10" aria-labelledby={`band-${band.key}`}>
+          <h2 id={`band-${band.key}`} className="text-2xl font-semibold">
             {band.label} <span className="text-base font-normal text-muted">({band.trips.length})</span>
           </h2>
           <ul className="mt-4 grid gap-5 md:grid-cols-2">
@@ -104,7 +104,14 @@ export default async function WeekendTripsPage({ params }: { params: Promise<{ s
                     </Link>
                   </h3>
                   <p className="text-sm text-muted">
-                    {[t.state, `about ${t.distanceKm} km in a straight line`].filter(Boolean).join(" · ")}
+                    {[
+                      t.state,
+                      t.driveMinutes !== null && t.roadKm !== null
+                        ? `about ${driveTime(t.driveMinutes)} by road (${t.roadKm} km)`
+                        : `about ${t.distanceKm} km in a straight line`,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </p>
                   {t.knownFor ? (
                     <p className="text-sm text-ink-2">
@@ -115,6 +122,16 @@ export default async function WeekendTripsPage({ params }: { params: Promise<{ s
                     <p className="text-sm text-ink-2">
                       <span className="font-medium text-ink">Getting there: </span>
                       {t.gettingThere} <SourceLink s={t.gettingThereSource} />
+                    </p>
+                  ) : null}
+                  {t.airport || t.station ? (
+                    <p className="text-sm text-ink-2">
+                      {[
+                        t.airport ? `Nearest airport: ${t.airport.code ?? t.airport.name} (${t.airport.distanceKm} km)` : null,
+                        t.station ? `Railway station: ${t.station.name} (${t.station.distanceKm} km)` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
                     </p>
                   ) : null}
                   <p className="text-sm text-ink-2">

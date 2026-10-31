@@ -147,6 +147,8 @@ app:
     wikivoyage-api-url: https://en.wikivoyage.org/w/api.php
     commons-api-url: https://commons.wikimedia.org/w/api.php
     open-meteo-archive-url: https://archive-api.open-meteo.com/v1/archive
+    # Modelled air quality (Copernicus CAMS) for the smog-season note.
+    open-meteo-air-quality-url: https://air-quality-api.open-meteo.com/v1/air-quality
     # OpenStreetMap: release-based import of the Geofabrik India extract (ODbL).
     osm-extract-url: ${OSM_EXTRACT_URL:https://download.geofabrik.de/asia/india-latest.osm.pbf}
     osm-state-url: ${OSM_STATE_URL:https://download.geofabrik.de/asia/india-updates/state.txt}
@@ -166,6 +168,11 @@ app:
     # destinations within the radius that have a Wikivoyage article but no guide yet, nearest and best known first.
     focus: ${INGESTION_FOCUS:}
     focus-batch: ${INGESTION_FOCUS_BATCH:60}
+    # OSRM routing server for weekend-trip drive times (car profile over OpenStreetMap). The public demo server is for
+    # light, non-commercial use: one request per second at most, which the fetcher's pacing keeps to.
+    osrm-url: ${OSRM_URL:https://router.project-osrm.org}
+    # OurAirports export (public domain), for the nearest airport with scheduled flights.
+    our-airports-url: https://davidmegginson.github.io/ourairports-data/airports.csv
   freshness:
     stable-days: 1095
     semi-stable-days: 365

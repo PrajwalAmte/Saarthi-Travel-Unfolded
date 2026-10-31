@@ -35,7 +35,7 @@ export function tabTitle(tab: string, d: Pick<DestinationDetail, "name" | "secti
     case "explore":
       return n(c.explore) ? `Things to do in ${d.name}: ${n(c.explore)} sights and activities` : `Things to do in ${d.name}`;
     case "neighbourhoods":
-      return `Neighbourhoods of ${d.name}: which area to stay in`;
+      return `Areas of ${d.name}: which part to stay in`;
     case "budget":
       return `What things cost in ${d.name}: food, stays and entry fees`;
     case "getting-around":

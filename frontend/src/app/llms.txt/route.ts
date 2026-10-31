@@ -23,7 +23,7 @@ export function GET() {
 ## Main pages
 - Destinations with guides: ${base}/search
 - A destination guide: ${base}/d/{slug} (for example ${base}/d/bengaluru), with tabs /eat, /stay, /explore,
-  /neighbourhoods, /budget, /getting-around and /tips
+  /neighbourhoods (areas of the place), /budget, /getting-around and /tips
 - States link to the guides of their places: for example ${base}/d/karnataka
 - How information is collected and checked: ${base}/about
 - Every source, its licence and its import health: ${base}/sources

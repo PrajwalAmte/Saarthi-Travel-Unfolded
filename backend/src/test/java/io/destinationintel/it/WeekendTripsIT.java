@@ -69,9 +69,48 @@ class WeekendTripsIT extends IntegrationTest {
         t.path("comfortableMonths").forEach(m -> months.add(m.asInt()));
         assertThat(months).as("mild and mostly dry only").containsExactly(1, 11);
         assertThat(r.path("method").toString()).contains("straight line").contains("not by road");
+        assertThat(r.path("bandsBy").asString()).isEqualTo("distance");
+        assertThat(t.path("driveMinutes").isNull()).as("no drive time until routes are computed").isTrue();
 
         JsonNode origins = body(mvc.perform(get("/api/trips/origins")).andExpect(status().isOk()).andReturn());
         assertThat(origins.path(0).path("slug").asString()).isEqualTo("testville");
         mvc.perform(get("/api/trips/weekend-from/no-such-place")).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void driveTimesComeFromTheRouterOnceAndGroupTripsByHours() throws Exception {
+        UUID origin = seedTestvillePlace();
+        ingestGuide(origin);
+        guidedPlace("Q900000043", "Hillstation", 12.85, 76.65); // ~60 km straight, ~75 km by road, ~1.5 h
+        guidedPlace("Q900000044", "Coastal", 13.9, 76.65); // ~180 km straight, ~4.5 h by road
+        guidedPlace("Q900000045", "Island", 12.2, 77.0); // the stub router finds no road here
+
+        int before = SourceStub.get().osrmRequests.get();
+        runRoutes(origin);
+        assertThat(SourceStub.get().osrmRequests.get() - before).as("one table request for all three places").isEqualTo(1);
+        assertThat(jdbc.sql("SELECT count(*) FROM road_route WHERE origin_id = :o").param("o", origin).query(Integer.class).single())
+                .as("a no-route answer is stored too, so it is not asked again").isEqualTo(3);
+        runRoutes(origin);
+        assertThat(SourceStub.get().osrmRequests.get() - before).as("nothing is due the second time").isEqualTo(1);
+
+        caches.getCache("destination-detail").clear();
+        JsonNode r = body(mvc.perform(get("/api/trips/weekend-from/testville")).andExpect(status().isOk()).andReturn());
+        assertThat(r.path("bandsBy").asString()).isEqualTo("drive_time");
+        assertThat(r.path("bands").path(0).path("label").asString()).isEqualTo("Up to 3 hours by road");
+        JsonNode hill = r.path("bands").path(0).path("trips").path(0);
+        assertThat(hill.path("name").asString()).isEqualTo("Hillstation");
+        assertThat(hill.path("roadKm").asInt()).isBetween(70, 80);
+        assertThat(hill.path("driveMinutes").asInt()).isBetween(85, 95);
+        assertThat(r.path("bands").path(1).path("label").asString()).isEqualTo("3 to 5 hours by road");
+        JsonNode last = r.path("bands").path(2);
+        assertThat(last.path("key").asString()).isEqualTo("no-route");
+        assertThat(last.path("trips").path(0).path("name").asString()).isEqualTo("Island");
+        assertThat(r.path("method").toString()).contains("OSRM").contains("OpenStreetMap").contains("without traffic");
+    }
+
+    private void runRoutes(UUID origin) {
+        jobs.enqueue("road_routes", "osrm", origin, java.util.Map.of("radiusKm", 400), "road_routes:" + origin + ":" + UUID.randomUUID(),
+                1000, "admin");
+        runner.execute(jobs.claimNext().orElseThrow());
     }
 }

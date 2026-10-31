@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import WeekendTripsPage, { generateMetadata } from "@/app/trips/weekend-from/[slug]/page";
-import { monthRanges } from "@/lib/trips";
+import { driveTime, monthRanges } from "@/lib/trips";
 import type { Trip, WeekendTrips } from "@/lib/types";
 import { axeViolations } from "./a11y";
 
@@ -17,6 +17,8 @@ function trip(slug: string, distanceKm: number, overrides: Partial<Trip> = {}): 
     kind: "town",
     state: "Karnataka",
     distanceKm,
+    roadKm: null,
+    driveMinutes: null,
     coverageStatus: "usable",
     placesToEat: 4,
     placesToStay: 2,
@@ -25,6 +27,8 @@ function trip(slug: string, distanceKm: number, overrides: Partial<Trip> = {}): 
     knownForSource: null,
     gettingThere: null,
     gettingThereSource: null,
+    airport: null,
+    station: null,
     comfortableMonths: [],
     climatePeriod: null,
     imageUrl: null,
@@ -40,11 +44,12 @@ function view(overrides: Partial<WeekendTrips> = {}): WeekendTrips {
     maxKm: 350,
     total: 5,
     generatedAt: "2026-10-29T10:00:00Z",
+    bandsBy: "distance",
+    routesComputedAt: null,
     bands: [
       {
+        key: "km-150",
         label: "Up to 150 km",
-        fromKm: 30,
-        toKm: 150,
         trips: [
           trip("mysuru", 127, {
             knownFor: "Mysuru is known for its palace.",
@@ -52,13 +57,15 @@ function view(overrides: Partial<WeekendTrips> = {}): WeekendTrips {
             gettingThere: "Trains run from Bengaluru every hour.",
             gettingThereSource: { name: "Wikivoyage", url: "https://en.wikivoyage.org/wiki/Mysore" },
             comfortableMonths: [11, 12, 1, 2],
+            airport: { name: "Mysore Airport", code: "MYQ", distanceKm: 10 },
+            station: { name: "Mysuru Junction", code: null, distanceKm: 2 },
             climatePeriod: "1991-2020",
           }),
           trip("ramanagara", 50, { comfortableMonths: [], climatePeriod: "1991-2020", placesToStay: 0 }),
         ],
       },
-      { label: "150 to 250 km", fromKm: 150, toKm: 250, trips: [trip("hassan", 180), trip("madikeri", 220)] },
-      { label: "250 to 350 km", fromKm: 250, toKm: 350, trips: [trip("ooty", 270)] },
+      { key: "km-250", label: "150 to 250 km", trips: [trip("hassan", 180), trip("madikeri", 220)] },
+      { key: "km-350", label: "250 to 350 km", trips: [trip("ooty", 270, { roadKm: 330, driveMinutes: 392 })] },
     ],
     method: ["Distances are in a straight line, not by road."],
     ...overrides,
@@ -77,11 +84,13 @@ describe("Weekend trips page", () => {
     expect(first).toHaveTextContent("Mysuru is known for its palace.");
     expect(first).toHaveTextContent("about 127 km in a straight line");
     expect(first).toHaveTextContent("Mildest months: Nov–Feb");
+    expect(first).toHaveTextContent("Nearest airport: MYQ (10 km) · Railway station: Mysuru Junction (2 km)");
     expect(within(first).getAllByRole("link", { name: "Wikivoyage" })[0]).toHaveAttribute("href", "https://en.wikivoyage.org/wiki/Mysore");
     expect(within(first).getByRole("link", { name: /Open the guide/ })).toHaveAttribute("href", "/d/mysuru");
     expect(second).toHaveTextContent("No month is both mild and mostly dry");
     expect(second).not.toHaveTextContent("to stay");
     expect(screen.getByText("Distances are in a straight line, not by road.")).toBeInTheDocument();
+    expect(screen.getByText(/about 6 h 30 min by road \(330 km\)/)).toBeInTheDocument();
     const ld = [...container.querySelectorAll('script[type="application/ld+json"]')].map((s) => JSON.parse(s.textContent ?? "{}"));
     expect(ld.find((d) => d["@type"] === "ItemList")?.numberOfItems).toBe(5);
     expect(await axeViolations(container)).toEqual([]);
@@ -112,5 +121,14 @@ describe("monthRanges", () => {
     expect(monthRanges([10, 11, 12, 1, 2, 3, 6])).toBe("Jun, Oct–Mar");
     expect(monthRanges([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])).toBe("All year");
     expect(monthRanges([])).toBe("");
+  });
+});
+
+describe("driveTime", () => {
+  it("rounds to five minutes and reads naturally", () => {
+    expect(driveTime(43)).toBe("45 min");
+    expect(driveTime(180)).toBe("3 h");
+    expect(driveTime(192)).toBe("3 h 10 min");
+    expect(driveTime(1)).toBe("5 min");
   });
 });

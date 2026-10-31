@@ -537,6 +537,9 @@ export type Trip = {
   kind: string;
   state: string | null;
   distanceKm: number;
+  /** Road distance and car drive time from the origin (OSRM over OpenStreetMap), when computed. */
+  roadKm: number | null;
+  driveMinutes: number | null;
   coverageStatus: CoverageStatus;
   placesToEat: number;
   placesToStay: number;
@@ -545,6 +548,9 @@ export type Trip = {
   knownForSource: TripSource;
   gettingThere: string | null;
   gettingThereSource: TripSource;
+  /** Nearest airport with scheduled flights and nearest railway station, straight-line (OurAirports / OpenStreetMap). */
+  airport: TripHub;
+  station: TripHub;
   comfortableMonths: number[];
   climatePeriod: string | null;
   imageUrl: string | null;
@@ -558,6 +564,29 @@ export type WeekendTrips = {
   maxKm: number;
   total: number;
   generatedAt: string;
-  bands: { label: string; fromKm: number; toKm: number; trips: Trip[] }[];
+  bandsBy: "drive_time" | "distance";
+  routesComputedAt: string | null;
+  bands: { key: string; label: string; trips: Trip[] }[];
   method: string[];
 };
+
+/** One automatic check of a stale price or opening hours against the place's own website. */
+export type FactCheck = {
+  id: string;
+  destinationSlug: string;
+  destinationName: string;
+  title: string;
+  kind: "price" | "hours";
+  oldValue: string;
+  verdict: "confirmed" | "changed" | "not_stated" | "closed" | "unreadable" | "rejected";
+  outcome: "applied" | "noted" | "skipped";
+  newValue: string | null;
+  quote: string | null;
+  pageUrl: string | null;
+  reason: string | null;
+  pagesRead: number;
+  checkedAt: string;
+  undoneAt: string | null;
+};
+
+export type TripHub = { name: string; code: string | null; distanceKm: number } | null;

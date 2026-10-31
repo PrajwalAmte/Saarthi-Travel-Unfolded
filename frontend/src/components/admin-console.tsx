@@ -141,6 +141,10 @@ export function AdminConsole() {
                 <option value="heritage_monuments">ASI-numbered monuments</option>
                 <option value="quality_evaluation">Re-evaluate a source&apos;s quality</option>
                 <option value="coverage_refresh">Recompute coverage</option>
+                <option value="road_routes">Drive times from a weekend-trips city</option>
+                <option value="nearest_transport">Nearest airport and railway station (all guides)</option>
+                <option value="air_quality">Smog season</option>
+                <option value="fact_check">Check stale prices and hours on official websites</option>
               </Select>
             </Field>
             <Field label="Destination slug" htmlFor="job-slug" hint="e.g. mysore (not needed for the index)">

@@ -69,13 +69,21 @@ public record AppProperties(
             double overtureMinConfidence,
             List<String> jobTypes,
             List<String> focus,
-            int focusBatch) {
+            int focusBatch,
+            String osrmUrl,
+            String ourAirportsUrl,
+            String openMeteoAirQualityUrl) {
 
         public Ingestion {
             seedGuides = seedGuides == null ? List.of()
                     : seedGuides.stream().filter(StringUtils::hasText).map(String::trim).toList();
             focus = focus == null ? List.of() : focus.stream().filter(StringUtils::hasText).map(String::trim).toList();
             focusBatch = focusBatch <= 0 ? 60 : focusBatch;
+            osrmUrl = StringUtils.hasText(osrmUrl) ? osrmUrl.trim() : "https://router.project-osrm.org";
+            ourAirportsUrl = StringUtils.hasText(ourAirportsUrl) ? ourAirportsUrl.trim()
+                    : "https://davidmegginson.github.io/ourairports-data/airports.csv";
+            openMeteoAirQualityUrl = StringUtils.hasText(openMeteoAirQualityUrl) ? openMeteoAirQualityUrl.trim()
+                    : "https://air-quality-api.open-meteo.com/v1/air-quality";
             jobTypes = jobTypes == null ? List.of()
                     : jobTypes.stream().filter(StringUtils::hasText).map(String::trim).toList();
         }

@@ -1,6 +1,15 @@
 /** Fewer than this and a weekend-trips page would be thin: it is not shown (or indexed) until more guides exist. */
 export const MIN_TRIPS = 5;
 
+/** "45 min", "3 h", "3 h 10 min", rounded to 5 minutes. */
+export function driveTime(minutes: number): string {
+  const m = Math.max(5, Math.round(minutes / 5) * 5);
+  const h = Math.floor(m / 60);
+  const rest = m % 60;
+  if (!h) return `${rest} min`;
+  return rest ? `${h} h ${rest} min` : `${h} h`;
+}
+
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /** "Nov–Feb", "Jan, Mar": consecutive months (wrapping round the year) shown as ranges. */

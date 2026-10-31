@@ -16,8 +16,8 @@ import { siteUrl } from "@/lib/site-url";
 import { isHub } from "@/lib/types";
 import { parsePreferences, preferencesToParams } from "@/lib/preferences";
 import { apiGet } from "@/lib/server-api";
-import { MIN_TRIPS } from "@/lib/trips";
-import type { Entry, FactSectionView, SectionView, WeekendTrips } from "@/lib/types";
+import type { Entry, FactSectionView, SectionView } from "@/lib/types";
+import { weekendTripCount } from "@/lib/weekend-trips";
 
 export const dynamic = "force-dynamic";
 
@@ -29,18 +29,6 @@ type Props = {
 async function section(slug: string, tab: string, prefs: string): Promise<SectionView | null> {
   try {
     return await apiGet<SectionView>(`/api/destinations/${slug}/sections/${tab}?size=3${prefs ? `&${prefs}` : ""}`);
-  } catch {
-    return null;
-  }
-}
-
-/** How many weekend trips the trips page lists, when this place is one of the trip origins. */
-async function weekendTrips(slug: string): Promise<number | null> {
-  try {
-    const origins = await apiGet<{ slug: string }[]>("/api/trips/origins");
-    if (!origins.some((o) => o.slug === slug)) return null;
-    const w = await apiGet<WeekendTrips>(`/api/trips/weekend-from/${slug}`);
-    return w.total >= MIN_TRIPS ? w.total : null;
   } catch {
     return null;
   }
@@ -103,12 +91,25 @@ export default async function OverviewPage({ params, searchParams }: Props) {
     section(slug, "explore", prefs),
     section(slug, "stay", prefs),
     apiGet<FactSectionView>(`/api/destinations/${slug}/tips`).catch(() => null),
-    weekendTrips(slug),
+    weekendTripCount(slug),
   ]);
 
   return (
     <div className="space-y-10">
       <JsonLd data={breadcrumbJsonLd(siteUrl(), destinationCrumbs(d))} />
+      {trips ? (
+        <Link
+          href={`/trips/weekend-from/${slug}`}
+          className="flex items-center justify-between gap-3 rounded-lg border border-accent/40 bg-accent-soft p-5 hover:border-accent"
+        >
+          <span>
+            <span className="block text-xl font-semibold">Weekend trips from {d.name}</span>
+            <span className="mt-1 block text-sm text-ink-2">{trips} places with guides, by distance, with the months their weather is mildest.</span>
+          </span>
+          <ArrowRight className="size-5 shrink-0 text-accent" aria-hidden />
+        </Link>
+      ) : null}
+
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <section>
           <h2 className="text-2xl font-semibold">About {d.name}</h2>
@@ -136,19 +137,6 @@ export default async function OverviewPage({ params, searchParams }: Props) {
           </aside>
         ) : null}
       </div>
-
-      {trips ? (
-        <Link
-          href={`/trips/weekend-from/${slug}`}
-          className="flex items-center justify-between gap-3 rounded-lg border border-line bg-surface p-5 hover:border-accent"
-        >
-          <span>
-            <span className="block text-xl font-semibold">Weekend trips from {d.name}</span>
-            <span className="mt-1 block text-sm text-ink-2">{trips} places with guides, by distance, with the months their weather is mildest.</span>
-          </span>
-          <ArrowRight className="size-5 shrink-0 text-accent" aria-hidden />
-        </Link>
-      ) : null}
 
       <PreferenceBar />
 

@@ -1,4 +1,4 @@
-import { ArrowRight, BadgeCheck, FileText, HeartHandshake } from "lucide-react";
+import { ArrowRight, BadgeCheck, CalendarDays, FileText, HeartHandshake } from "lucide-react";
 import Link from "next/link";
 import { HomeSearch } from "@/components/home-search";
 import { JsonLd } from "@/components/json-ld";
@@ -8,6 +8,7 @@ import { siteUrl } from "@/lib/site-url";
 import { apiGet } from "@/lib/server-api";
 import type { Meta, Page } from "@/lib/types";
 import { safeHref } from "@/lib/utils";
+import { tripOrigins } from "@/lib/weekend-trips";
 
 export const dynamic = "force-dynamic";
 export const metadata = { alternates: { canonical: "/" } };
@@ -32,9 +33,10 @@ async function load<T>(path: string): Promise<T | null> {
 }
 
 export default async function HomePage() {
-  const [meta, guides] = await Promise.all([
+  const [meta, guides, origins] = await Promise.all([
     load<Meta>("/api/meta"),
     load<Page<Guide>>("/api/destinations?withGuide=true&size=6"),
+    tripOrigins(),
   ]);
   const indexed = meta?.indexedDestinations ?? 0;
 
@@ -82,6 +84,32 @@ export default async function HomePage() {
           ) : null}
         </div>
       </section>
+
+      {origins.length ? (
+        <section className="container-page pt-12 sm:pt-14" aria-labelledby="weekend-trips">
+          <h2 id="weekend-trips" className="text-2xl font-semibold sm:text-3xl">
+            Weekend trips
+          </h2>
+          <ul className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {origins.map((o) => (
+              <li key={o.slug}>
+                <Link
+                  href={`/trips/weekend-from/${o.slug}`}
+                  className="flex h-full items-start gap-3 rounded-lg border border-accent/40 bg-accent-soft p-4 hover:border-accent"
+                >
+                  <CalendarDays className="mt-0.5 size-5 shrink-0 text-accent" aria-hidden />
+                  <span>
+                    <span className="block font-serif text-xl font-semibold">From {o.name}</span>
+                    <span className="mt-0.5 block text-sm text-ink-2">
+                      {o.total} places within {o.maxKm} km, nearest first, with the months their weather is mildest
+                    </span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {guides && guides.items.length ? (
         <section className="container-page py-12 sm:py-14">

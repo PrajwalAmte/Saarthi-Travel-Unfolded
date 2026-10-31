@@ -50,6 +50,7 @@ public class AiReviewController {
     private final tools.jackson.databind.json.JsonMapper mapper;
     private final ListingFixes fixes;
     private final FlagDecider decider;
+    private final FactChecker checker;
 
     public record PreviewEntry(UUID entryId, String section, String title, String area, String original, String summary,
                                String summaryStatus, String summaryRejection, Object tags, Object extracted) {}
@@ -60,7 +61,8 @@ public class AiReviewController {
 
     public AiReviewController(JdbcClient jdbc, CurrentUser current, AuditService audit, GuideChanges changes, JobRepository jobs,
                               PlaceRepository places, AiProperties props, AiPublishing publishing,
-                              tools.jackson.databind.json.JsonMapper mapper, ListingFixes fixes, FlagDecider decider) {
+                              tools.jackson.databind.json.JsonMapper mapper, ListingFixes fixes, FlagDecider decider,
+                              FactChecker checker) {
         this.jdbc = jdbc;
         this.current = current;
         this.audit = audit;
@@ -72,6 +74,7 @@ public class AiReviewController {
         this.mapper = mapper;
         this.fixes = fixes;
         this.decider = decider;
+        this.checker = checker;
     }
 
     @GetMapping("/publish")
@@ -225,6 +228,45 @@ public class AiReviewController {
                          ORDER BY r.resolved_at DESC LIMIT :limit OFFSET :offset""")
                 .param("auto", automatic).param("limit", sz).param("offset", p * sz).query(Decision.class).list();
         return PageResponse.of(items, p, sz, total);
+    }
+
+    public record Check(UUID id, String destinationSlug, String destinationName, String title, String kind, String oldValue,
+                        String verdict, String outcome, String newValue, String quote, String pageUrl, String reason, int pagesRead,
+                        OffsetDateTime checkedAt, OffsetDateTime undoneAt) {}
+
+    @GetMapping("/checks")
+    @Operation(summary = "Recent automatic checks of prices and hours against official websites, newest first")
+    public PageResponse<Check> checks(@RequestParam(required = false) String outcome, @RequestParam(required = false) Integer page,
+                                      @RequestParam(required = false) Integer size) {
+        int p = PageResponse.clampPage(page);
+        int sz = PageResponse.clampSize(size, 25);
+        String where = " WHERE (CAST(:outcome AS text) IS NULL OR c.outcome = :outcome)";
+        long total = jdbc.sql("SELECT count(*) FROM fact_check c" + where).param("outcome", outcome).query(Long.class).single();
+        List<Check> items = jdbc.sql("""
+                        SELECT c.id, d.slug AS destination_slug, d.name AS destination_name, coalesce(e.title, '') AS title, f.kind,
+                               f.value_text AS old_value, c.verdict, c.outcome, c.new_value, c.quote, c.page_url, c.reason,
+                               c.pages_read, c.created_at AS checked_at, c.undone_at
+                        FROM fact_check c JOIN place d ON d.id = c.destination_id JOIN fact f ON f.id = c.fact_id
+                        LEFT JOIN guide_entry e ON e.id = c.entry_id""" + where + """
+                         ORDER BY c.created_at DESC LIMIT :limit OFFSET :offset""")
+                .param("outcome", outcome).param("limit", sz).param("offset", p * sz).query(Check.class).list();
+        return PageResponse.of(items, p, sz, total);
+    }
+
+    @PostMapping("/checks/{id}/undo")
+    @Operation(summary = "Reverse an applied automatic check: the previous value or date comes back")
+    public Map<String, Object> undoCheck(@PathVariable UUID id) {
+        checker.undo(id, current.require().id());
+        return Map.of("status", "undone", "message", "Undone: the fact is back as it was before the check.");
+    }
+
+    @PostMapping("/destinations/{slug}/check")
+    @Operation(summary = "Queue an automatic check of one destination's stale prices and hours against official websites")
+    public Map<String, Object> queueCheck(@PathVariable String slug) {
+        requireActive();
+        PlaceRow p = places.findBySlug(slug).orElseThrow(() -> ApiException.notFound("Destination"));
+        UUID job = jobs.enqueue("fact_check", "official-website", p.id(), Map.of(), "fact_check:" + p.id(), 4, "admin");
+        return Map.of("jobId", job, "message", "Checking " + p.name() + "'s stale prices and hours against official websites.");
     }
 
     @PostMapping("/decide-now")

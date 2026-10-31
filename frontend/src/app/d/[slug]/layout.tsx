@@ -9,6 +9,7 @@ import { getDestination } from "@/lib/destination";
 import { destinationDescription, destinationTitle, NOINDEX, placeJsonLd } from "@/lib/seo";
 import { siteUrl } from "@/lib/site-url";
 import { isHub } from "@/lib/types";
+import { weekendTripCount } from "@/lib/weekend-trips";
 
 type Props = { children: React.ReactNode; params: Promise<{ slug: string }> };
 
@@ -42,6 +43,7 @@ export default async function DestinationLayout({ children, params }: Props) {
   const { slug } = await params;
   const d = await getDestination(slug);
   if (!d) notFound();
+  const weekendTrips = d.guideAvailable ? await weekendTripCount(d.slug) : null;
   return (
     <div className="container-page">
       {d.guideAvailable || isHub(d) ? <JsonLd data={placeJsonLd(siteUrl(), d)} /> : null}
@@ -49,7 +51,7 @@ export default async function DestinationLayout({ children, params }: Props) {
       {d.guideAvailable ? (
         <>
           <Suspense fallback={<div className="h-11 border-b border-line" />}>
-            <GuideTabs slug={d.slug} counts={d.sectionCounts} />
+            <GuideTabs slug={d.slug} counts={d.sectionCounts} weekendTrips={weekendTrips} />
           </Suspense>
           <div className="pt-6">{children}</div>
         </>

@@ -151,7 +151,7 @@ export function ContributeForm({ destinationId, slug, name }: { destinationId: s
               <Select id="c-tip-section" name="tipSection" defaultValue="tips">
                 <option value="tips">General local tip</option>
                 <option value="getting_around">Getting around</option>
-                <option value="neighbourhood">A neighbourhood</option>
+                <option value="neighbourhood">An area or neighbourhood</option>
                 <option value="eat">A local dish or speciality</option>
                 <option value="stay">Where to stay</option>
                 <option value="practical">When to visit</option>

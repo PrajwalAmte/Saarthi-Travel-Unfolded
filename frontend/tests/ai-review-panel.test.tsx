@@ -79,6 +79,17 @@ function mockApi(u: AiUsage, flags: AiFlag[]) {
           { entryId: "b", section: "eat", title: "Fable", area: null, original: "Long text", summary: "Founded in 1888.", summaryStatus: "rejected", summaryRejection: "number \"1888\" is not in the original", tags: [], extracted: [{ kind: "price", quote: "Thali ₹180" }] },
         ],
       });
+    if (url.includes("/checks?"))
+      return json({
+        items: [
+          { id: "c1", destinationSlug: "mysuru", destinationName: "Mysuru", title: "Palace Heritage Hotel", kind: "price", oldValue: "₹9000", verdict: "changed", outcome: "applied", newValue: "from ₹10,500", quote: "Heritage rooms from ₹10,500 per night", pageUrl: "https://hotel.example/tariff", reason: "Tariff page.", pagesRead: 2, checkedAt: "2026-10-31T00:00:00Z", undoneAt: null },
+          { id: "c2", destinationSlug: "mysuru", destinationName: "Mysuru", title: "Old Cafe", kind: "hours", oldValue: "9AM-9PM", verdict: "closed", outcome: "noted", newValue: null, quote: "We have permanently closed", pageUrl: "https://cafe.example/", reason: "Says closed.", pagesRead: 1, checkedAt: "2026-10-31T00:00:00Z", undoneAt: null },
+        ],
+        page: 0,
+        size: 15,
+        totalItems: 2,
+        totalPages: 1,
+      });
     if (url.includes("/flags?")) return json({ items: flags, page: 0, size: 20, totalItems: flags.length, totalPages: 1 });
     if (init?.method === "POST") return json({ message: "The listing is hidden from the guide." });
     return json({});
@@ -164,5 +175,19 @@ describe("AiReviewPanel", () => {
     expect(screen.getByText(/hidden · “A finance company\.”/)).toBeInTheDocument();
     await userEvent.click(screen.getAllByRole("button", { name: "Undo" })[0]!);
     await waitFor(() => expect(spy.mock.calls.some(([u, i]) => String(u).endsWith("/flags/d1/undo") && i?.method === "POST")).toBe(true));
+  });
+
+  it("lists website checks with their quotes; only applied ones can be undone", async () => {
+    const spy = mockApi(usage, []);
+    render(<AiReviewPanel />);
+    await userEvent.click(await screen.findByText("Checked against official websites (2)"));
+    expect(screen.getByText(/price ₹9000 — changed to from ₹10,500/)).toBeInTheDocument();
+    expect(screen.getByText(/“Heritage rooms from ₹10,500 per night”/)).toBeInTheDocument();
+    expect(screen.getByText(/website says it has closed \(left for you to decide\)/)).toBeInTheDocument();
+    const details = screen.getByText("Checked against official websites (2)").closest("details")!;
+    const undo = Array.from(details.querySelectorAll("button")).filter((b) => b.textContent === "Undo");
+    expect(undo).toHaveLength(1);
+    await userEvent.click(undo[0]!);
+    await waitFor(() => expect(spy.mock.calls.some(([u, i]) => String(u).endsWith("/checks/c1/undo") && i?.method === "POST")).toBe(true));
   });
 });

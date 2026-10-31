@@ -69,6 +69,9 @@ public abstract class IntegrationTest {
         registry.add("spring.datasource.password", POSTGRES::getPassword);
         registry.add("app.ingestion.wikivoyage-api-url", () -> SourceStub.get().baseUrl() + "/wv/api.php");
         registry.add("app.ingestion.wikidata-api-url", () -> SourceStub.get().baseUrl() + "/wd/api.php");
+        registry.add("app.ingestion.osrm-url", () -> SourceStub.get().baseUrl() + "/osrm");
+        registry.add("app.ingestion.open-meteo-air-quality-url", () -> SourceStub.get().baseUrl() + "/airquality");
+        registry.add("app.ingestion.our-airports-url", () -> SourceStub.get().baseUrl() + "/ourairports/airports.csv");
     }
 
     @TestConfiguration
@@ -95,7 +98,7 @@ public abstract class IntegrationTest {
         jdbc.sql("""
                 TRUNCATE place, app_user, ingestion_job, destination_request, audit_log, login_token,
                          spring_session, source_sync_run, quality_report, poi_match_review, poi_source_record, poi,
-                         place_source_identity, importer_heartbeat, ai_review CASCADE
+                         place_source_identity, importer_heartbeat, ai_review, airport, air_quality_cell CASCADE
                 """).update();
         jdbc.sql("""
                 UPDATE source SET enabled = true, last_success_at = NULL, last_error = NULL, last_error_at = NULL,

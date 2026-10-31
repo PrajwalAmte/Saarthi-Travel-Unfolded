@@ -3,7 +3,7 @@
 import Link from "next/link";
 import * as React from "react";
 import { api, problemMessage } from "@/lib/client-api";
-import type { Page } from "@/lib/types";
+import type { FactCheck, Page } from "@/lib/types";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Notice } from "./ui/notice";
@@ -91,6 +91,15 @@ const SECTION_TEXT: Record<string, string> = {
 };
 
 /** Where the reviewer would move a listing, when that is a real section different from its current one. */
+const CHECK_TEXT: Record<FactCheck["verdict"], string> = {
+  confirmed: "confirmed on the website",
+  changed: "changed to",
+  not_stated: "not stated on the website",
+  closed: "website says it has closed (left for you to decide)",
+  unreadable: "website could not be read",
+  rejected: "answer not borne out by the page, nothing changed",
+};
+
 function moveTarget(f: AiFlag): string | null {
   const s = f.suggestedSection;
   return s && s !== f.section && s in SECTION_TEXT ? s : null;
@@ -119,6 +128,7 @@ export function AiReviewPanel() {
   const [previewSlug, setPreviewSlug] = React.useState("");
   const [preview, setPreview] = React.useState<AiPreview | null>(null);
   const [decisions, setDecisions] = React.useState<Page<AiDecision> | null>(null);
+  const [checks, setChecks] = React.useState<Page<FactCheck> | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -127,13 +137,15 @@ export function AiReviewPanel() {
       api<Page<AiFlag>>("/api/admin/ai-review/flags?size=20"),
       api<{ published: boolean }>("/api/admin/ai-review/publish"),
       api<Page<AiDecision>>("/api/admin/ai-review/decisions?automatic=true&size=15"),
+      api<Page<FactCheck>>("/api/admin/ai-review/checks?size=15").catch(() => null),
     ])
-      .then(([u, f, p, d]) => {
+      .then(([u, f, p, d, c]) => {
         if (cancelled) return;
         setUsage(u);
         setFlags(f);
         setPublished(p.published);
         setDecisions(d);
+        setChecks(c);
       })
       .catch((e) => {
         if (!cancelled) setMessage({ tone: "error", text: problemMessage(e) });
@@ -337,6 +349,49 @@ export function AiReviewPanel() {
                 </span>
                 {d.resolution === "moved" || d.resolution === "hidden" ? (
                   <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void act(d.id, () => api(`/api/admin/ai-review/flags/${d.id}/undo`, { method: "POST" }))}>
+                    Undo
+                  </Button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+
+      {checks && checks.items.length ? (
+        <details className="rounded-lg border border-line bg-surface p-3 text-sm">
+          <summary className="cursor-pointer select-none font-medium">
+            Checked against official websites ({checks.totalItems.toLocaleString("en-IN")})
+          </summary>
+          <ul className="mt-2 divide-y divide-line">
+            {checks.items.map((c) => (
+              <li key={c.id} className="flex flex-wrap items-start justify-between gap-2 py-2">
+                <span className="min-w-0">
+                  <span className="font-medium">{c.title}</span>{" "}
+                  <span className="text-muted">
+                    in{" "}
+                    <Link className="underline" href={`/d/${c.destinationSlug}`}>
+                      {c.destinationName}
+                    </Link>
+                    {": "}
+                    {c.kind === "price" ? "price" : "hours"} {c.oldValue} — {CHECK_TEXT[c.verdict]}
+                    {c.newValue ? ` ${c.newValue}` : ""}
+                    {c.outcome === "noted" && (c.verdict === "confirmed" || c.verdict === "changed") ? " (not applied: AI improvements are switched off)" : ""}
+                    {c.undoneAt ? " · undone" : ""}
+                  </span>
+                  {c.quote ? (
+                    <span className="mt-0.5 block text-xs text-muted">
+                      “{c.quote}”{" "}
+                      {c.pageUrl ? (
+                        <a className="underline" href={c.pageUrl} target="_blank" rel="noopener noreferrer">
+                          page
+                        </a>
+                      ) : null}
+                    </span>
+                  ) : null}
+                </span>
+                {c.outcome === "applied" && !c.undoneAt ? (
+                  <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void act(c.id, () => api(`/api/admin/ai-review/checks/${c.id}/undo`, { method: "POST" }))}>
                     Undo
                   </Button>
                 ) : null}

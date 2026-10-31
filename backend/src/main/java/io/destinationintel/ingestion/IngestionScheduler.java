@@ -140,6 +140,7 @@ public class IngestionScheduler {
         int climate = refreshDue("open-meteo", "climate", "place_source_sync s WHERE s.source_id = 'open-meteo'", createdBy);
         plan.put("climateRefreshes", climate);
         plan.put("climateMissing", climateMissing(createdBy));
+        plan.put("airQualityMissing", airQualityMissing(createdBy));
 
         if (config.expansionPerDay() > 0 && config.runs("wikivoyage_guide")) {
             List<UUID> next = jdbc.sql("""
@@ -160,6 +161,7 @@ public class IngestionScheduler {
         }
 
         plan.put("focus", focusArea(createdBy));
+        plan.put("nearestTransport", nearestTransport(createdBy));
 
         if (config.runs("coverage_refresh")) {
             jobs.enqueue("coverage_refresh", null, null, Map.of(), "coverage_refresh:all", 0, createdBy);
@@ -174,9 +176,6 @@ public class IngestionScheduler {
      */
     Map<String, Integer> focusArea(String createdBy) {
         Map<String, Integer> out = new LinkedHashMap<>();
-        if (!config.runs("wikivoyage_guide")) {
-            return out;
-        }
         for (String spec : config.focus()) {
             String[] f = spec.split(":");
             String slug = f[0].trim();
@@ -187,7 +186,7 @@ public class IngestionScheduler {
                 log.warn("Ignoring focus area {}: radius is not a number", spec);
                 continue;
             }
-            List<UUID> next = jdbc.sql("""
+            List<UUID> next = !config.runs("wikivoyage_guide") ? List.of() : jdbc.sql("""
                             WITH centre AS (SELECT geog FROM place WHERE slug = :slug AND geog IS NOT NULL)
                             SELECT p.id FROM place p CROSS JOIN centre
                             WHERE p.is_destination AND p.lifecycle_status = 'active' AND p.geog IS NOT NULL
@@ -203,8 +202,31 @@ public class IngestionScheduler {
                     .param("n", config.focusBatch()).query(UUID.class).list();
             next.forEach(id -> jobs.enqueue("wikivoyage_guide", "wikivoyage-en", id, Map.of(), "wikivoyage_guide:" + id, 20, createdBy));
             out.put(slug, next.size());
+            if (config.runs("road_routes")) {
+                // Drive times for the weekend-trips page; the job only asks the router for places not yet routed.
+                jdbc.sql("SELECT id FROM place WHERE slug = :slug AND geog IS NOT NULL").param("slug", slug).query(UUID.class).optional()
+                        .ifPresent(origin -> jobs.enqueue("road_routes", "osrm", origin, Map.of("radiusKm", km),
+                                "road_routes:" + origin, 5, createdBy));
+            }
         }
         return out;
+    }
+
+    /** Nearest airport and railway station for guides that lack them; one job works through them in batches. */
+    private boolean nearestTransport(String createdBy) {
+        if (!config.runs("nearest_transport")) {
+            return false;
+        }
+        boolean due = jdbc.sql("""
+                        SELECT EXISTS (SELECT 1 FROM place p JOIN destination_profile dp ON dp.place_id = p.id AND dp.coverage_status <> 'indexed'
+                        LEFT JOIN place_source_sync s ON s.place_id = p.id AND s.source_id = 'ourairports' AND s.external_id = 'nearest'
+                        WHERE p.geog IS NOT NULL AND (s.last_synced_at IS NULL
+                           OR s.last_synced_at < now() - make_interval(days => (SELECT refresh_interval_days FROM source WHERE id = 'ourairports'))))""")
+                .query(Boolean.class).single();
+        if (due) {
+            jobs.enqueue("nearest_transport", "ourairports", null, Map.of(), "nearest_transport:all", 1, createdBy);
+        }
+        return due;
     }
 
     /** Guides that never got their weather data (for example after the weather service refused for a while). */
@@ -222,6 +244,25 @@ public class IngestionScheduler {
                 .param("n", CLIMATE_CATCH_UP_PER_RUN).query(UUID.class).list();
         missing.forEach(id -> jobs.enqueue("climate", "open-meteo", id, Map.of(), "climate:" + id, 1, createdBy));
         return missing.size();
+    }
+
+    /** Guides without a smog-season check (or whose check is a year old), a few per run: it shares Open-Meteo's allowance. */
+    private int airQualityMissing(String createdBy) {
+        if (!config.runs("air_quality")) {
+            return 0;
+        }
+        List<UUID> due = jdbc.sql("""
+                        SELECT p.id FROM place p JOIN destination_profile dp ON dp.place_id = p.id AND dp.coverage_status <> 'indexed'
+                        LEFT JOIN place_source_sync s ON s.place_id = p.id AND s.source_id = 'open-meteo-air'
+                        WHERE p.latitude IS NOT NULL
+                          AND (s.last_synced_at IS NULL OR s.last_synced_at < now() - make_interval(days =>
+                               (SELECT refresh_interval_days FROM source WHERE id = 'open-meteo-air')))
+                          AND NOT EXISTS (SELECT 1 FROM ingestion_job j WHERE j.target_place_id = p.id AND j.job_type = 'air_quality'
+                                          AND j.status IN ('queued', 'running'))
+                        ORDER BY s.last_synced_at NULLS FIRST, coalesce(p.sitelink_count, 0) DESC LIMIT :n""")
+                .param("n", CLIMATE_CATCH_UP_PER_RUN).query(UUID.class).list();
+        due.forEach(id -> jobs.enqueue("air_quality", "open-meteo-air", id, Map.of(), "air_quality:" + id, 1, createdBy));
+        return due.size();
     }
 
     /** Small batches, so catching up never trips the weather service's rate limit again. */

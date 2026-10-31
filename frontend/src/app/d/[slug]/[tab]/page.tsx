@@ -26,7 +26,7 @@ const TITLES: Record<Tab, string> = {
   eat: "Eat",
   stay: "Stay",
   explore: "Explore",
-  neighbourhoods: "Neighbourhoods",
+  neighbourhoods: "Areas",
   budget: "Budget",
   "getting-around": "Getting around",
   tips: "Local tips",
@@ -130,10 +130,10 @@ async function TabContent({ params, searchParams }: Props) {
     return (
       <div className="space-y-10">
         {empty ? (
-          <Notice tone="info" title="No neighbourhood information yet">
-            No source has described this destination’s neighbourhoods yet.{" "}
+          <Notice tone="info" title="No information about areas yet">
+            No source has described the areas of this destination yet.{" "}
             <Link href={`/contribute/${slug}`} className="underline">
-              Add a neighbourhood note
+              Add a note about an area
             </Link>{" "}
             if you know the area.
           </Notice>

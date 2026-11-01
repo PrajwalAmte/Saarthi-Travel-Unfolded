@@ -41,15 +41,18 @@ public class RateLimiter {
         long windowMillis = window.toMillis();
         String id = bucket + ':' + key;
         // The hit is counted inside compute, which is atomic per key, so it always lands on the
-        // window that is current at that moment (never on one being replaced at a rollover).
+        // window that is current at that moment (never on one being replaced at a rollover). The
+        // decision uses the count this hit produced: re-reading it later would see other threads'
+        // hits too and refuse a request that was within the limit.
+        int[] hit = new int[1];
         Window w = windows.compute(id, (k, existing) -> {
             Window current = existing == null || now - existing.startMillis() >= windowMillis
                     ? new Window(now, new AtomicInteger())
                     : existing;
-            current.count().incrementAndGet();
+            hit[0] = current.count().incrementAndGet();
             return current;
         });
-        if (w.count().get() > limit) {
+        if (hit[0] > limit) {
             long remaining = windowMillis - (now - w.startMillis());
             throw new RateLimitedException(Duration.ofMillis(Math.max(1000, remaining)));
         }

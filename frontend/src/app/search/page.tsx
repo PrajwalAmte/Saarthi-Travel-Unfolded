@@ -5,10 +5,12 @@ import { CoverageBadge } from "@/components/coverage-badge";
 import { RequestForm } from "@/components/request-form";
 import { SearchBox } from "@/components/search-box";
 import { ServiceWaking } from "@/components/service-waking";
+import { QuestionResults } from "@/components/question-results";
 import { Notice } from "@/components/ui/notice";
 import { preferencesToParams, parsePreferences } from "@/lib/preferences";
 import { apiGet } from "@/lib/server-api";
 import type { Page, SearchResult } from "@/lib/types";
+import { looksLikeQuestion } from "@/lib/question";
 import { kindLabel } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -49,19 +51,14 @@ export default async function SearchPage({ searchParams }: Props) {
     failed = true;
   }
   const hrefFor = (slug: string) => `/d/${slug}${prefs ? `?${prefs}` : ""}`;
+  // A question ("hill station near Pune in May") is read into filters; an exact place name never is.
+  const asQuestion = looksLikeQuestion(q) && !(result?.results[0]?.matchType === "exact");
 
-  return (
-    <div className="container-page py-8 sm:py-12">
-      <h1 className="text-3xl font-semibold sm:text-4xl">{q ? `Destinations matching “${q}”` : "Find a destination"}</h1>
-      <div className="mt-6 max-w-2xl">
-        <SearchBox size="md" initialQuery={q} suffix={prefs} />
-      </div>
-      {failed ? (
-        <ServiceWaking className="mt-6 max-w-2xl" />
-      ) : null}
 
-      {result ? (
-        result.results.length ? (
+  function nameResults() {
+    if (!result) return null;
+    return (
+      result.results.length ? (
           <section className="mt-8">
             <p className="text-sm text-muted">
               {result.results.length} indexed place{result.results.length === 1 ? "" : "s"}. Where several share a name, the
@@ -104,7 +101,22 @@ export default async function SearchPage({ searchParams }: Props) {
             <RequestForm initialQuery={q} />
           </section>
         )
+    );
+  }
+
+  return (
+    <div className="container-page py-8 sm:py-12">
+      <h1 className="text-3xl font-semibold sm:text-4xl">
+        {!q ? "Find a destination" : asQuestion ? `Places for “${q}”` : `Destinations matching “${q}”`}
+      </h1>
+      <div className="mt-6 max-w-2xl">
+        <SearchBox size="md" initialQuery={q} suffix={prefs} />
+      </div>
+      {failed ? (
+        <ServiceWaking className="mt-6 max-w-2xl" />
       ) : null}
+
+      {result && asQuestion ? <QuestionResults key={q} q={q}>{nameResults()}</QuestionResults> : result ? nameResults() : null}
 
       {!q && guides ? (
         <section className="mt-10">

@@ -145,6 +145,7 @@ export function AdminConsole() {
                 <option value="nearest_transport">Nearest airport and railway station (all guides)</option>
                 <option value="air_quality">Smog season</option>
                 <option value="fact_check">Check stale prices and hours on official websites</option>
+                <option value="wikivoyage_redirects">Search names from Wikivoyage redirects (all)</option>
               </Select>
             </Field>
             <Field label="Destination slug" htmlFor="job-slug" hint="e.g. mysore (not needed for the index)">

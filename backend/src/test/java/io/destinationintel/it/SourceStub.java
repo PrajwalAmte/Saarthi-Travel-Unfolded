@@ -26,6 +26,8 @@ public final class SourceStub {
     private final Map<String, Article> articles = new ConcurrentHashMap<>();
     public final AtomicInteger requests = new AtomicInteger();
     public final AtomicInteger osrmRequests = new AtomicInteger();
+    /** Wikivoyage redirect titles by target article, for the search-names import. */
+    public final Map<String, java.util.List<String>> redirects = new ConcurrentHashMap<>();
     public final AtomicInteger airQualityRequests = new AtomicInteger();
     /** Paths of every official-website page the checker read. */
     public final java.util.List<String> siteRequests = new java.util.concurrent.CopyOnWriteArrayList<>();
@@ -47,6 +49,19 @@ public final class SourceStub {
         server.createContext("/wv/api.php", exchange -> {
             requests.incrementAndGet();
             Map<String, String> q = query(exchange.getRequestURI().getRawQuery());
+            if ("redirects".equals(q.get("prop"))) {
+                StringBuilder pages = new StringBuilder();
+                for (String title : q.getOrDefault("titles", "").split("\\|")) {
+                    StringBuilder rd = new StringBuilder();
+                    for (String r : redirects.getOrDefault(title, java.util.List.of())) {
+                        rd.append(rd.length() == 0 ? "" : ",").append("{\"ns\":0,\"title\":\"").append(r).append("\"}");
+                    }
+                    pages.append(pages.length() == 0 ? "" : ",").append("{\"ns\":0,\"title\":\"").append(title)
+                            .append("\",\"redirects\":[").append(rd).append("]}");
+                }
+                respond(exchange, "{\"batchcomplete\":true,\"query\":{\"pages\":[" + pages + "]}}");
+                return;
+            }
             Article a = articles.get(q.getOrDefault("titles", ""));
             String body;
             if (a == null) {
@@ -201,6 +216,34 @@ public final class SourceStub {
             tools.jackson.databind.json.JsonMapper m = tools.jackson.databind.json.JsonMapper.builder().build();
             String req = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
             String prompt = m.readTree(req).path("contents").path(0).path("parts").path(0).path("text").asString();
+            if (prompt.startsWith("Today is ")) {
+                // Natural-language search: read the question into filters the way the real model is asked to.
+                String question = prompt.substring(prompt.indexOf("Question: ") + 10).toLowerCase(java.util.Locale.ROOT);
+                var intent = m.createObjectNode();
+                if (question.contains("from testville") || question.contains("of testville")) {
+                    intent.put("origin", "Testville");
+                }
+                java.util.regex.Matcher hours = java.util.regex.Pattern.compile("(\\d+) hours?").matcher(question);
+                if (hours.find()) {
+                    intent.put("maxHours", Integer.parseInt(hours.group(1)));
+                }
+                if (question.contains("april")) {
+                    intent.put("month", 4);
+                }
+                var types = intent.putArray("types");
+                if (question.contains("hill")) {
+                    types.add("hill_station");
+                }
+                if (question.contains("beach")) {
+                    types.add("beach");
+                }
+                var unsupported = intent.putArray("unsupported");
+                if (question.contains("quiet")) {
+                    unsupported.add("quiet");
+                }
+                respondGemini(exchange, m, model, m.writeValueAsString(intent));
+                return;
+            }
             if (prompt.startsWith("Check this fact.")) {
                 respondGemini(exchange, m, model, checkerAnswer(m, prompt));
                 return;

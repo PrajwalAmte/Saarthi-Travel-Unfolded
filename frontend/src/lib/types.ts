@@ -590,3 +590,24 @@ export type FactCheck = {
 };
 
 export type TripHub = { name: string; code: string | null; distanceKm: number } | null;
+
+/** Natural-language search: how the question was read, and places from Saarthi's own data with sourced reasons. */
+export type QuestionAnswer = {
+  query: string;
+  mode: "question" | "name" | "unavailable";
+  understood: string[];
+  unsupported: string[];
+  notes: string[];
+  origin: { slug: string; name: string } | null;
+  results: {
+    slug: string;
+    name: string;
+    kind: string;
+    state: string | null;
+    distanceKm: number | null;
+    driveMinutes: number | null;
+    coverageStatus: CoverageStatus;
+    imageUrl: string | null;
+    reasons: { text: string; sourceName: string | null; sourceUrl: string | null }[];
+  }[];
+};

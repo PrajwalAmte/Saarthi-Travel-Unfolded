@@ -39,6 +39,7 @@ public class DestinationController {
     private static final CacheControl PUBLIC_SHORT = CacheControl.maxAge(30, TimeUnit.SECONDS).cachePublic();
 
     private final SearchService search;
+    private final io.destinationintel.ai.QuestionSearch questions;
     private final DestinationService destinations;
     private final GuideService guide;
     private final BudgetService budget;
@@ -46,9 +47,10 @@ public class DestinationController {
     private final ClientIpResolver ip;
     private final AppProperties props;
 
-    public DestinationController(SearchService search, DestinationService destinations, GuideService guide,
+    public DestinationController(SearchService search, io.destinationintel.ai.QuestionSearch questions, DestinationService destinations, GuideService guide,
                                  BudgetService budget, RateLimiter rateLimiter, ClientIpResolver ip, AppProperties props) {
         this.search = search;
+        this.questions = questions;
         this.destinations = destinations;
         this.guide = guide;
         this.budget = budget;
@@ -66,6 +68,14 @@ public class DestinationController {
         rateLimiter.check("search", ip.resolve(request), props.rateLimits().searchPerMinute(), Duration.ofMinutes(1));
         return ResponseEntity.ok().cacheControl(PUBLIC_SHORT)
                 .body(search.search(q, limit == null ? 8 : limit));
+    }
+
+    @GetMapping("/search/ask")
+    @Operation(summary = "Answer a travel question with places from Saarthi's own data; a model only reads the question into filters")
+    public ResponseEntity<io.destinationintel.ai.QuestionSearch.Answer> ask(
+            @RequestParam("q") @Size(max = 200) String q, HttpServletRequest request) {
+        rateLimiter.check("ask", ip.resolve(request), 10, Duration.ofMinutes(1));
+        return ResponseEntity.ok().cacheControl(PUBLIC_SHORT).body(questions.ask(q));
     }
 
     @GetMapping("/destinations/sitemap")

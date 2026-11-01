@@ -70,6 +70,15 @@ export default async function HomePage() {
           </p>
           <div className="mt-8 max-w-3xl">
             <HomeSearch />
+            <p className="mt-2 text-sm text-muted">
+              Search a place, or ask:{" "}
+              <Link
+                href={`/search?q=${encodeURIComponent("hill station within 4 hours from Bangalore in April")}`}
+                className="text-accent underline"
+              >
+                hill station within 4 hours from Bangalore in April
+              </Link>
+            </p>
           </div>
           {meta === null ? (
             <ServiceWaking className="mt-6 max-w-3xl" />

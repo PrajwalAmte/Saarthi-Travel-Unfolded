@@ -162,6 +162,7 @@ public class IngestionScheduler {
 
         plan.put("focus", focusArea(createdBy));
         plan.put("nearestTransport", nearestTransport(createdBy));
+        plan.put("wikivoyageRedirects", wikivoyageRedirects(createdBy));
 
         if (config.runs("coverage_refresh")) {
             jobs.enqueue("coverage_refresh", null, null, Map.of(), "coverage_refresh:all", 0, createdBy);
@@ -210,6 +211,22 @@ public class IngestionScheduler {
             }
         }
         return out;
+    }
+
+    /** Search names from Wikivoyage redirects, refreshed monthly (about 40 small requests for the whole country). */
+    private boolean wikivoyageRedirects(String createdBy) {
+        if (!config.runs("wikivoyage_redirects")) {
+            return false;
+        }
+        boolean due = jdbc.sql("""
+                        SELECT NOT EXISTS (SELECT 1 FROM ingestion_job WHERE job_type = 'wikivoyage_redirects'
+                                           AND (status IN ('queued', 'running')
+                                                OR (status = 'succeeded' AND finished_at > now() - interval '30 days')))""")
+                .query(Boolean.class).single();
+        if (due) {
+            jobs.enqueue("wikivoyage_redirects", "wikivoyage-en", null, Map.of(), "wikivoyage_redirects:all", 2, createdBy);
+        }
+        return due;
     }
 
     /** Nearest airport and railway station for guides that lack them; one job works through them in batches. */

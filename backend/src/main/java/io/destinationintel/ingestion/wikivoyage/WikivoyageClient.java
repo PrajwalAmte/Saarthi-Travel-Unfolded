@@ -3,7 +3,10 @@ package io.destinationintel.ingestion.wikivoyage;
 import io.destinationintel.config.AppProperties;
 import io.destinationintel.ingestion.HttpFetcher;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
@@ -52,5 +55,54 @@ public class WikivoyageClient {
         return Optional.of(new Revision(page.path("pageid").asLong(), page.path("title").asString(),
                 rev.path("revid").asLong(), OffsetDateTime.parse(rev.path("timestamp").asString()),
                 rev.path("slots").path("main").path("content").asString("")));
+    }
+
+    /**
+     * The titles that redirect to each of the given articles (at most 50 per call), keyed by the title as asked.
+     * Follows the API's continuation, so long redirect lists are complete.
+     */
+    public Map<String, List<String>> redirectsTo(List<String> titles) {
+        Map<String, List<String>> out = new LinkedHashMap<>();
+        titles.forEach(t -> out.put(t, new ArrayList<>()));
+        Map<String, String> asked = new HashMap<>();
+        titles.forEach(t -> asked.put(t.replace('_', ' '), t));
+        Map<String, String> q = new LinkedHashMap<>();
+        q.put("action", "query");
+        q.put("prop", "redirects");
+        q.put("rdprop", "title");
+        q.put("rdnamespace", "0");
+        q.put("rdlimit", "max");
+        q.put("titles", String.join("|", titles));
+        q.put("format", "json");
+        q.put("formatversion", "2");
+        q.put("maxlag", "5");
+        for (int round = 0; round < 20; round++) {
+            JsonNode root = mapper.readTree(http.get(apiUrl, q, "application/json"));
+            if (root.has("error")) {
+                throw new HttpFetcher.FetchException("Wikivoyage API error: " + root.path("error").path("code").asString(), 200);
+            }
+            for (JsonNode n : root.path("query").path("normalized")) {
+                String from = asked.remove(n.path("from").asString());
+                if (from != null) {
+                    asked.put(n.path("to").asString(), from);
+                }
+            }
+            for (JsonNode page : root.path("query").path("pages")) {
+                String key = asked.get(page.path("title").asString());
+                if (key == null) {
+                    continue;
+                }
+                for (JsonNode r : page.path("redirects")) {
+                    out.get(key).add(r.path("title").asString());
+                }
+            }
+            JsonNode cont = root.path("continue");
+            if (!cont.has("rdcontinue")) {
+                break;
+            }
+            q.put("rdcontinue", cont.path("rdcontinue").asString());
+            q.put("continue", cont.path("continue").asString(""));
+        }
+        return out;
     }
 }

@@ -61,7 +61,7 @@ public class SecurityConfig {
                         .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/requests", "/api/requests/*/choose", "/api/requests/*/notify").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/search", "/api/destinations/**", "/api/facts/**",
+                        .requestMatchers(HttpMethod.GET, "/api/search", "/api/search/ask", "/api/destinations/**", "/api/facts/**",
                                 "/api/sources/**", "/api/requests/**", "/api/meta", "/api/status/**", "/api/quality/**", "/api/trips/**").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/moderation/**").hasRole("TRUSTED")

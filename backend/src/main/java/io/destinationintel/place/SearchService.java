@@ -9,6 +9,9 @@ import org.springframework.stereotype.Service;
 /**
  * Destination search over names and aliases using exact, prefix, word-prefix and trigram
  * matching. Only real indexed places are returned; an empty result is reported as such.
+ *
+ * <p>A fuzzy (typo-tolerant) match counts only when every distinctive word of the query resembles the name: "ekta
+ * nagar" must not offer "Kushal Nagar" just because both end in "nagar". Common place-name words are not distinctive.
  */
 @Service
 public class SearchService {
@@ -45,6 +48,14 @@ public class SearchService {
 
     public record SearchResult(String query, List<SearchHit> results) {}
 
+    /** Words so common in Indian place names that sharing one says nothing about a match. */
+    static final String[] GENERIC_WORDS = {"nagar", "nagaram", "pur", "puram", "pura", "abad", "garh", "gaon", "halli", "palli",
+            "pet", "peth", "ganj", "city", "town", "village", "district", "division", "taluk", "tehsil", "road", "beach", "hill",
+            "hills", "lake", "fort", "temple", "falls", "island", "national", "park", "new", "old", "east", "west", "north",
+            "south", "central", "the", "and"};
+    /** How closely each distinctive query word must resemble the name for a fuzzy match (Darjeeling/"darjiling" is 0.5). */
+    static final double WORD_MATCH = 0.4;
+
     private final JdbcClient jdbc;
 
     public SearchService(JdbcClient jdbc) {
@@ -58,6 +69,10 @@ public class SearchService {
         }
         List<SearchHit> hits = jdbc.sql("""
                         WITH q AS (SELECT idi_normalize(:q) AS nq),
+                        words AS (
+                            SELECT w FROM q, unnest(string_to_array(q.nq, ' ')) w
+                            WHERE length(w) >= 3 AND NOT (w = ANY (CAST(:generic AS text[])))
+                        ),
                         candidates AS (
                             SELECT a.place_id, a.alias, a.normalized,
                                    CASE
@@ -66,7 +81,10 @@ public class SearchService {
                                        WHEN a.normalized LIKE '% ' || q.nq || '%' THEN 0.75
                                        ELSE 0
                                    END AS prefix_score,
-                                   greatest(similarity(a.normalized, q.nq), word_similarity(q.nq, a.normalized) * 0.9) AS sim
+                                   CASE WHEN EXISTS (SELECT 1 FROM words WHERE word_similarity(words.w, a.normalized) < :wordMatch)
+                                        THEN 0
+                                        ELSE greatest(similarity(a.normalized, q.nq), word_similarity(q.nq, a.normalized) * 0.9)
+                                   END AS sim
                             FROM place_alias a, q
                             WHERE q.nq <> ''
                               AND (a.normalized % q.nq OR a.normalized LIKE q.nq || '%'
@@ -112,6 +130,8 @@ public class SearchService {
                         LIMIT :limit
                         """)
                 .param("q", query)
+                .param("generic", GENERIC_WORDS)
+                .param("wordMatch", WORD_MATCH)
                 .param("limit", Math.max(1, Math.min(limit, 25)))
                 .query(SearchHit.class)
                 .list();

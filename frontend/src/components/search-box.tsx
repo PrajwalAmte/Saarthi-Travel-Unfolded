@@ -3,6 +3,7 @@
 import { Loader2, MapPin, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import * as React from "react";
+import { looksLikeQuestion } from "@/lib/question";
 import { cn, kindLabel } from "@/lib/utils";
 import type { SearchHit, SearchResult } from "@/lib/types";
 import { CoverageBadge } from "./coverage-badge";
@@ -209,7 +210,18 @@ export function SearchBox({ suffix = "", initialQuery = "", autoFocus, size = "l
               </span>
             </li>
           ))}
-          {showRequest ? (
+          {showRequest && looksLikeQuestion(searched) ? (
+            <li role="presentation" className="px-3 py-3 text-sm text-ink-2">
+              <a
+                href={`/search?q=${encodeURIComponent(searched)}${suffix ? `&${suffix}` : ""}`}
+                className="font-medium text-accent underline"
+                onMouseDown={(e) => e.preventDefault()}
+              >
+                Find places for “{searched}”
+              </a>
+              <p className="mt-1 text-xs text-muted">Press Enter. Saarthi reads your question and lists places from its guides.</p>
+            </li>
+          ) : showRequest ? (
             <li role="presentation" className="px-3 py-3 text-sm text-ink-2">
               <p>No indexed destination matches “{searched}”.</p>
               <a

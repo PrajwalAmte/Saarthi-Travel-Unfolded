@@ -130,7 +130,8 @@ public class IndexConsistency {
                 if (info.latitude() != null) {
                     coordinates += jdbc.sql("""
                                     UPDATE place SET latitude = :lat, longitude = :lon, coordinates_source = 'wikidata', updated_at = now()
-                                    WHERE wikidata_id = :q AND (latitude IS DISTINCT FROM :lat OR longitude IS DISTINCT FROM :lon)
+                                    WHERE wikidata_id = :q AND coordinates_source IS DISTINCT FROM 'two_sources'
+                                      AND (latitude IS DISTINCT FROM :lat OR longitude IS DISTINCT FROM :lon)
                                     """).param("lat", info.latitude()).param("lon", info.longitude()).param("q", k.qid()).update();
                 }
             }

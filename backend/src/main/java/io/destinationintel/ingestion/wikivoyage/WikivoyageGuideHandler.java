@@ -6,6 +6,7 @@ import io.destinationintel.config.AppProperties;
 import io.destinationintel.guide.CoverageService;
 import io.destinationintel.ingestion.GuideWriter;
 import io.destinationintel.ingestion.GuideWriter.Outcome;
+import io.destinationintel.ingestion.HttpFetcher;
 import io.destinationintel.ingestion.JobHandler;
 import io.destinationintel.ingestion.JobRepository;
 import io.destinationintel.ingestion.JobRepository.JobRow;
@@ -47,6 +48,8 @@ import tools.jackson.databind.JsonNode;
 @Component
 public class WikivoyageGuideHandler implements JobHandler {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(WikivoyageGuideHandler.class);
+
     /**
      * Priority of the photo and climate jobs a guide queues. Above the guide imports (20 when queued in bulk),
      * so a destination's photo and weather arrive right after its guide, not after every guide in the queue.
@@ -72,13 +75,16 @@ public class WikivoyageGuideHandler implements JobHandler {
     /** AI review runs after the cheap follow-ups and the bulk imports, but before routine refreshes. */
     static final int AI_REVIEW_PRIORITY = 4;
 
+    private final io.destinationintel.ingestion.wikidata.PlaceCoordinates placeCoordinates;
+
     public WikivoyageGuideHandler(WikivoyageClient client, WikidataClient wikidata, PlaceRepository places,
                                   GuideWriter writer, SourceRepository sources, CoverageService coverage,
                                   JobRepository jobs, TransactionTemplate tx, JdbcClient jdbc, Json json,
                                   AuditService audit, AppProperties props,
                                   io.destinationintel.ingestion.run.SyncRunRecorder recorder,
                                   io.destinationintel.quality.QualityService quality,
-                                  io.destinationintel.ai.AiProperties ai) {
+                                  io.destinationintel.ai.AiProperties ai,
+                                  io.destinationintel.ingestion.wikidata.PlaceCoordinates placeCoordinates) {
         this.client = client;
         this.wikidata = wikidata;
         this.places = places;
@@ -94,6 +100,17 @@ public class WikivoyageGuideHandler implements JobHandler {
         this.recorder = recorder;
         this.quality = quality;
         this.ai = ai;
+        this.placeCoordinates = placeCoordinates;
+    }
+
+    /** Weather, nearby places and distances all follow from a place's point, so it is checked before a guide is built. */
+    private PlaceRow locationChecked(PlaceRow place) {
+        try {
+            return placeCoordinates.verify(place) ? places.findById(place.id()).orElse(place) : place;
+        } catch (HttpFetcher.FetchException e) {
+            log.warn("Could not check the location of {}: {}", place.slug(), e.getMessage());
+            return place;
+        }
     }
 
     /** True when the place has no data from this source yet, or it is older than the source's refresh interval. */
@@ -121,17 +138,18 @@ public class WikivoyageGuideHandler implements JobHandler {
             throw new PermanentFailure("The Wikivoyage source is disabled in the source registry");
         }
         Map<String, Object> params = json.map(job.params());
-        PlaceRow place;
+        PlaceRow target;
         if (job.targetPlaceId() != null) {
-            place = places.findById(job.targetPlaceId())
+            target = places.findById(job.targetPlaceId())
                     .orElseThrow(() -> new PermanentFailure("Target destination no longer exists"));
         } else if (params.get("wikidataId") instanceof String qid && qid.matches("^Q[0-9]+$")) {
             // Retryable: the place may simply not be indexed yet when this job is first attempted.
-            place = places.findByWikidataId(qid)
+            target = places.findByWikidataId(qid)
                     .orElseThrow(() -> new IllegalStateException(qid + " is not in the index yet"));
         } else {
             throw new PermanentFailure("Job has no target destination");
         }
+        PlaceRow place = locationChecked(target);
         if (place.wikivoyageTitle() == null) {
             throw new PermanentFailure("No English Wikivoyage article is linked to " + place.name() + " in Wikidata");
         }

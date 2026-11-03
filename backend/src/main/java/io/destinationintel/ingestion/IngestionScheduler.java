@@ -163,6 +163,7 @@ public class IngestionScheduler {
         plan.put("focus", focusArea(createdBy));
         plan.put("nearestTransport", nearestTransport(createdBy));
         plan.put("wikivoyageRedirects", wikivoyageRedirects(createdBy));
+        plan.put("unresolvedRetried", retryUnresolved(createdBy));
 
         if (config.runs("coverage_refresh")) {
             jobs.enqueue("coverage_refresh", null, null, Map.of(), "coverage_refresh:all", 0, createdBy);
@@ -211,6 +212,24 @@ public class IngestionScheduler {
             }
         }
         return out;
+    }
+
+    /**
+     * Requests that found nothing are tried again daily for a month: new search names, sources or a better resolver can
+     * answer them later, without anyone having to re-request or an admin stepping in.
+     */
+    private int retryUnresolved(String createdBy) {
+        if (!config.runs("resolve_request")) {
+            return 0;
+        }
+        List<UUID> stuck = jdbc.sql("""
+                        SELECT id FROM destination_request
+                        WHERE status = 'unresolvable' AND first_requested_at > now() - interval '30 days'
+                          AND updated_at < now() - interval '1 day'
+                        ORDER BY last_requested_at DESC LIMIT 20""")
+                .query(UUID.class).list();
+        stuck.forEach(id -> jobs.enqueue("resolve_request", "wikidata", null, Map.of("requestId", id.toString()), "resolve_request:" + id, 1, createdBy));
+        return stuck.size();
     }
 
     /** Search names from Wikivoyage redirects, refreshed monthly (about 40 small requests for the whole country). */

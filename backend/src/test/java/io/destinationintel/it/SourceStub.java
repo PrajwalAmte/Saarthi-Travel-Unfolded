@@ -26,6 +26,12 @@ public final class SourceStub {
     private final Map<String, Article> articles = new ConcurrentHashMap<>();
     public final AtomicInteger requests = new AtomicInteger();
     public final AtomicInteger osrmRequests = new AtomicInteger();
+    /** Wikivoyage article coordinates (lat, lon), by title. */
+    public final Map<String, double[]> articleCoordinates = new ConcurrentHashMap<>();
+    /** Wikidata search results as raw JSON objects, by search text. */
+    public final Map<String, String> wikidataSearch = new ConcurrentHashMap<>();
+    /** Wikidata items as raw JSON, by id. */
+    public final Map<String, String> wikidataEntities = new ConcurrentHashMap<>();
     /** Wikivoyage redirect titles by target article, for the search-names import. */
     public final Map<String, java.util.List<String>> redirects = new ConcurrentHashMap<>();
     public final AtomicInteger airQualityRequests = new AtomicInteger();
@@ -49,6 +55,28 @@ public final class SourceStub {
         server.createContext("/wv/api.php", exchange -> {
             requests.incrementAndGet();
             Map<String, String> q = query(exchange.getRequestURI().getRawQuery());
+            if ("coordinates".equals(q.get("prop"))) {
+                StringBuilder pages = new StringBuilder();
+                for (String title : q.getOrDefault("titles", "").split("\\|")) {
+                    double[] c = articleCoordinates.get(title);
+                    pages.append(pages.length() == 0 ? "" : ",").append("{\"ns\":0,\"title\":\"").append(title).append('"');
+                    if (c != null) {
+                        pages.append(",\"coordinates\":[{\"lat\":").append(c[0]).append(",\"lon\":").append(c[1]).append(",\"primary\":true,\"globe\":\"earth\"}]");
+                    }
+                    pages.append('}');
+                }
+                respond(exchange, "{\"query\":{\"pages\":[" + pages + "]}}");
+                return;
+            }
+            if ("1".equals(q.get("redirects")) && !q.containsKey("prop")) {
+                // Which article a title leads to, following redirects.
+                String title = q.getOrDefault("titles", "");
+                String target = articles.containsKey(title) ? title : redirects.entrySet().stream()
+                        .filter(e -> e.getValue().contains(title)).map(Map.Entry::getKey).findFirst().orElse(null);
+                respond(exchange, "{\"query\":{\"pages\":[{\"ns\":0,\"title\":\"" + (target == null ? title : target) + "\""
+                        + (target == null ? ",\"missing\":true" : "") + "}]}}");
+                return;
+            }
             if ("redirects".equals(q.get("prop"))) {
                 StringBuilder pages = new StringBuilder();
                 for (String title : q.getOrDefault("titles", "").split("\\|")) {
@@ -77,11 +105,19 @@ public final class SourceStub {
         server.createContext("/wd/api.php", exchange -> {
             requests.incrementAndGet();
             Map<String, String> q = query(exchange.getRequestURI().getRawQuery());
+            if ("wbsearchentities".equals(q.get("action"))) {
+                respond(exchange, "{\"search\":[" + wikidataSearch.getOrDefault(q.get("search"), "") + "]}");
+                return;
+            }
             StringBuilder sb = new StringBuilder("{\"entities\":{");
             String[] ids = q.getOrDefault("ids", "").split("\\|");
             for (int i = 0; i < ids.length; i++) {
                 if (i > 0) {
                     sb.append(',');
+                }
+                if (wikidataEntities.containsKey(ids[i])) {
+                    sb.append('"').append(ids[i]).append("\":").append(wikidataEntities.get(ids[i]));
+                    continue;
                 }
                 StringBuilder sitelinks = new StringBuilder();
                 int n = ids[i].equals("Q999999001") ? 40 : 2;

@@ -2,6 +2,8 @@ package io.destinationintel.ingestion.wikivoyage;
 
 import io.destinationintel.ingestion.JobHandler;
 import io.destinationintel.ingestion.JobRepository.JobRow;
+import io.destinationintel.ingestion.wikidata.PlaceCoordinates;
+import io.destinationintel.place.PlaceRepository;
 import io.destinationintel.source.SourceRepository;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -31,12 +33,17 @@ public class WikivoyageRedirectsHandler implements JobHandler {
     private final JdbcClient jdbc;
     private final SourceRepository sources;
     private final TransactionTemplate tx;
+    private final PlaceCoordinates coordinates;
+    private final PlaceRepository placeRepo;
 
-    public WikivoyageRedirectsHandler(WikivoyageClient client, JdbcClient jdbc, SourceRepository sources, TransactionTemplate tx) {
+    public WikivoyageRedirectsHandler(WikivoyageClient client, JdbcClient jdbc, SourceRepository sources, TransactionTemplate tx,
+                                      PlaceCoordinates coordinates, PlaceRepository placeRepo) {
         this.client = client;
         this.jdbc = jdbc;
         this.sources = sources;
         this.tx = tx;
+        this.coordinates = coordinates;
+        this.placeRepo = placeRepo;
     }
 
     @Override
@@ -66,6 +73,7 @@ public class WikivoyageRedirectsHandler implements JobHandler {
         int added = 0;
         int removed = 0;
         int requests = 0;
+        int moved = 0;
         for (int from = 0; from < places.size(); from += PER_REQUEST) {
             List<Titled> batch = places.subList(from, Math.min(places.size(), from + PER_REQUEST));
             Map<String, List<UUID>> byTitle = new HashMap<>();
@@ -95,12 +103,21 @@ public class WikivoyageRedirectsHandler implements JobHandler {
             });
             added += counts[0];
             removed += counts[1];
+            // The same pass checks each place's stored location against its article.
+            Map<String, double[]> articlePoints = client.coordinatesOf(new ArrayList<>(byTitle.keySet()));
+            for (Titled p : batch) {
+                double[] point = articlePoints.get(p.title().replace('_', ' '));
+                if (point != null && placeRepo.findById(p.id()).map(row -> coordinates.verifyAgainst(row, point)).orElse(false)) {
+                    moved++;
+                }
+            }
         }
         Map<String, Object> stats = new LinkedHashMap<>();
         stats.put("articles", places.size());
         stats.put("requests", requests);
         stats.put("added", added);
         stats.put("removed", removed);
+        stats.put("placesMoved", moved);
         return stats;
     }
 }

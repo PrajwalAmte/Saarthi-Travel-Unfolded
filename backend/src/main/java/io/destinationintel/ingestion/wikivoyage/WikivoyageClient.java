@@ -57,6 +57,45 @@ public class WikivoyageClient {
                 rev.path("slots").path("main").path("content").asString("")));
     }
 
+    /** Each article's primary coordinates (at most 50 titles per call), keyed by title with spaces; none if unstated. */
+    public Map<String, double[]> coordinatesOf(List<String> titles) {
+        Map<String, String> q = new LinkedHashMap<>();
+        q.put("action", "query");
+        q.put("prop", "coordinates");
+        q.put("coprimary", "primary");
+        q.put("colimit", "max");
+        q.put("titles", titles.stream().map(t -> t.replace('_', ' ')).collect(java.util.stream.Collectors.joining("|")));
+        q.put("format", "json");
+        q.put("formatversion", "2");
+        q.put("maxlag", "5");
+        JsonNode root = mapper.readTree(http.get(apiUrl, q, "application/json"));
+        Map<String, double[]> out = new HashMap<>();
+        for (JsonNode page : root.path("query").path("pages")) {
+            JsonNode c = page.path("coordinates").path(0);
+            if (c.has("lat") && "earth".equals(c.path("globe").asString("earth"))) {
+                out.put(page.path("title").asString(), new double[] {c.path("lat").asDouble(), c.path("lon").asDouble()});
+            }
+        }
+        return out;
+    }
+
+    /** The article a title leads to (following a redirect), or empty when Wikivoyage has no such page. */
+    public Optional<String> articleFor(String title) {
+        Map<String, String> q = new LinkedHashMap<>();
+        q.put("action", "query");
+        q.put("titles", title);
+        q.put("redirects", "1");
+        q.put("format", "json");
+        q.put("formatversion", "2");
+        q.put("maxlag", "5");
+        JsonNode root = mapper.readTree(http.get(apiUrl, q, "application/json"));
+        JsonNode page = root.path("query").path("pages").path(0);
+        if (page.isMissingNode() || page.path("missing").asBoolean(false) || page.path("invalid").asBoolean(false)) {
+            return Optional.empty();
+        }
+        return Optional.of(page.path("title").asString());
+    }
+
     /**
      * The titles that redirect to each of the given articles (at most 50 per call), keyed by the title as asked.
      * Follows the API's continuation, so long redirect lists are complete.

@@ -342,6 +342,32 @@ public class RequestService {
                 .param("id", id).update();
     }
 
+    /**
+     * True only when the hint names a real state and the place is known to be in a different one. The hint box is free
+     * text ("Vadodara" is a city), and many places have no state on record, so anything else does not rule a place out.
+     */
+    boolean stateConflicts(UUID placeId, String stateHint) {
+        if (stateHint == null || stateHint.isBlank()) {
+            return false;
+        }
+        return jdbc.sql("""
+                        SELECT EXISTS (SELECT 1 FROM place s WHERE s.kind IN ('state', 'union_territory')
+                                         AND s.name_normalized = idi_normalize(:h))
+                           AND EXISTS (SELECT 1 FROM place_relation r WHERE r.child_id = :p AND r.relation = 'in_state')
+                           AND NOT EXISTS (SELECT 1 FROM place_relation r JOIN place s ON s.id = r.parent_id
+                                           WHERE r.child_id = :p AND r.relation = 'in_state' AND s.name_normalized = idi_normalize(:h))""")
+                .param("h", stateHint).param("p", placeId).query(Boolean.class).single();
+    }
+
+    /** Says why the requester sees a different name: what they asked for is found under this place's guide. */
+    @Transactional
+    public void noteFoundAs(UUID requestId, String asked, PlaceRow place) {
+        jdbc.sql("""
+                        UPDATE destination_request SET status_detail = :note || ' ' || coalesce(status_detail, ''), updated_at = now()
+                        WHERE id = :id AND status <> 'merged'""")
+                .param("note", "“" + asked + "” is covered by the guide to " + place.name() + ".").param("id", requestId).update();
+    }
+
     /** Exact name/alias match among indexed destinations, optionally narrowed by state. */
     Optional<PlaceRow> exactLocalMatch(String normalized, String stateHint) {
         List<UUID> ids = jdbc.sql("""

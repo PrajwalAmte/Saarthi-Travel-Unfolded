@@ -90,8 +90,10 @@ public class PlaceRepository {
         if (existing.isPresent()) {
             jdbc.sql("""
                             UPDATE place SET name = :name, kind = :kind, description = :description,
-                                   latitude = :lat, longitude = :lon,
-                                   coordinates_source = CASE WHEN CAST(:lat AS double precision) IS NOT NULL THEN 'wikidata' END,
+                                   latitude = CASE WHEN coordinates_source = 'two_sources' THEN latitude ELSE :lat END,
+                                   longitude = CASE WHEN coordinates_source = 'two_sources' THEN longitude ELSE :lon END,
+                                   coordinates_source = CASE WHEN coordinates_source = 'two_sources' THEN coordinates_source
+                                                             WHEN CAST(:lat AS double precision) IS NOT NULL THEN 'wikidata' END,
                                    population = :population,
                                    wikivoyage_title = coalesce(:wv, wikivoyage_title), iso_code = coalesce(:iso, iso_code),
                                    sitelink_count = coalesce(:sitelinks, sitelink_count),

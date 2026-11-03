@@ -108,9 +108,12 @@ export default async function HomePage() {
                 >
                   <CalendarDays className="mt-0.5 size-5 shrink-0 text-accent" aria-hidden />
                   <span>
-                    <span className="block font-serif text-xl font-semibold">From {o.name}</span>
+                    <span className="block font-serif text-xl font-semibold">
+                      From {o.name}
+                      {o.stateName && !o.stateName.includes(o.name) ? `, ${o.stateName}` : ""}
+                    </span>
                     <span className="mt-0.5 block text-sm text-ink-2">
-                      {o.total} places within {o.maxKm} km, nearest first, with the months their weather is mildest
+                      {o.total} places within {o.radiusKm} km, nearest first, with the months their weather is mildest
                     </span>
                   </span>
                 </Link>

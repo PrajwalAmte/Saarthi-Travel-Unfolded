@@ -566,7 +566,8 @@ export type WeekendTrips = {
   generatedAt: string;
   bandsBy: "drive_time" | "distance";
   routesComputedAt: string | null;
-  bands: { key: string; label: string; trips: Trip[] }[];
+  /** total counts every guided place in the band; trips holds the best known of them. */
+  bands: { key: string; label: string; total: number; trips: Trip[] }[];
   method: string[];
 };
 

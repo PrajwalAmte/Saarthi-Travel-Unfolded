@@ -88,8 +88,11 @@ export default async function WeekendTripsPage({ params }: { params: Promise<{ s
       {w.bands.map((band) => (
         <section key={band.key} className="mt-10" aria-labelledby={`band-${band.key}`}>
           <h2 id={`band-${band.key}`} className="text-2xl font-semibold">
-            {band.label} <span className="text-base font-normal text-muted">({band.trips.length})</span>
+            {band.label} <span className="text-base font-normal text-muted">({band.total})</span>
           </h2>
+          {band.total > band.trips.length ? (
+            <p className="mt-1 text-sm text-muted">Showing the {band.trips.length} best known of {band.total}.</p>
+          ) : null}
           <ul className="mt-4 grid gap-5 md:grid-cols-2">
             {band.trips.map((t) => (
               <li key={t.slug} className="overflow-hidden rounded-lg border border-line bg-surface">

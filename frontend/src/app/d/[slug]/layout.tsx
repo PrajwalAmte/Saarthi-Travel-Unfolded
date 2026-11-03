@@ -1,4 +1,6 @@
+import { ArrowRight } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { DestinationHeader } from "@/components/guide/destination-header";
@@ -9,7 +11,7 @@ import { getDestination } from "@/lib/destination";
 import { destinationDescription, destinationTitle, NOINDEX, placeJsonLd } from "@/lib/seo";
 import { siteUrl } from "@/lib/site-url";
 import { isHub } from "@/lib/types";
-import { weekendTripCount } from "@/lib/weekend-trips";
+import { tripOrigins, weekendTripCount } from "@/lib/weekend-trips";
 
 type Props = { children: React.ReactNode; params: Promise<{ slug: string }> };
 
@@ -44,6 +46,8 @@ export default async function DestinationLayout({ children, params }: Props) {
   const d = await getDestination(slug);
   if (!d) notFound();
   const weekendTrips = d.guideAvailable ? await weekendTripCount(d.slug) : null;
+  // A state's page points to weekend trips from the cities in it (Goa to Panaji).
+  const hubTrips = isHub(d) ? (await tripOrigins()).filter((o) => o.stateSlug === d.slug) : [];
   return (
     <div className="container-page">
       {d.guideAvailable || isHub(d) ? <JsonLd data={placeJsonLd(siteUrl(), d)} /> : null}
@@ -57,6 +61,19 @@ export default async function DestinationLayout({ children, params }: Props) {
         </>
       ) : (
         <>
+          {hubTrips.map((o) => (
+            <Link
+              key={o.slug}
+              href={`/trips/weekend-from/${o.slug}`}
+              className="mt-6 flex items-center justify-between gap-3 rounded-lg border border-accent/40 bg-accent-soft p-5 hover:border-accent"
+            >
+              <span>
+                <span className="block text-xl font-semibold">Weekend trips from {o.name}</span>
+                <span className="mt-1 block text-sm text-ink-2">{o.total} places with guides, by drive time.</span>
+              </span>
+              <ArrowRight className="size-5 shrink-0 text-accent" aria-hidden />
+            </Link>
+          ))}
           <IndexedOnly d={d} />
           <div className="pb-10 pt-8">{children}</div>
         </>

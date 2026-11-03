@@ -50,6 +50,7 @@ function view(overrides: Partial<WeekendTrips> = {}): WeekendTrips {
       {
         key: "km-150",
         label: "Up to 150 km",
+        total: 2,
         trips: [
           trip("mysuru", 127, {
             knownFor: "Mysuru is known for its palace.",
@@ -64,8 +65,8 @@ function view(overrides: Partial<WeekendTrips> = {}): WeekendTrips {
           trip("ramanagara", 50, { comfortableMonths: [], climatePeriod: "1991-2020", placesToStay: 0 }),
         ],
       },
-      { key: "km-250", label: "150 to 250 km", trips: [trip("hassan", 180), trip("madikeri", 220)] },
-      { key: "km-350", label: "250 to 350 km", trips: [trip("ooty", 270, { roadKm: 330, driveMinutes: 392 })] },
+      { key: "km-250", label: "150 to 250 km", total: 60, trips: [trip("hassan", 180), trip("madikeri", 220)] },
+      { key: "km-350", label: "250 to 350 km", total: 1, trips: [trip("ooty", 270, { roadKm: 330, driveMinutes: 392 })] },
     ],
     method: ["Distances are in a straight line, not by road."],
     ...overrides,
@@ -93,6 +94,7 @@ describe("Weekend trips page", () => {
     expect(screen.getByText(/about 6 h 30 min by road \(330 km\)/)).toBeInTheDocument();
     const ld = [...container.querySelectorAll('script[type="application/ld+json"]')].map((s) => JSON.parse(s.textContent ?? "{}"));
     expect(ld.find((d) => d["@type"] === "ItemList")?.numberOfItems).toBe(5);
+    expect(screen.getByText("Showing the 2 best known of 60.")).toBeInTheDocument();
     expect(await axeViolations(container)).toEqual([]);
   });
 

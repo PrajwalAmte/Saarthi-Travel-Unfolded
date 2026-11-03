@@ -26,16 +26,15 @@ describe("Guide tabs", () => {
 
 describe("Weekend trip origins", () => {
   beforeEach(() => {
-    apiGet.mockReset().mockImplementation(async (path: string) => {
-      if (path === "/api/trips/origins") return [{ slug: "bengaluru", name: "Bengaluru", radiusKm: 350 }, { slug: "sirsi", name: "Sirsi", radiusKm: 200 }];
-      if (path.endsWith("/bengaluru")) return { total: 80, maxKm: 350 };
-      if (path.endsWith("/sirsi")) return { total: 2, maxKm: 200 };
-      throw new Error("unexpected " + path);
-    });
+    apiGet.mockReset().mockResolvedValue([
+      { slug: "bengaluru", name: "Bengaluru", radiusKm: 350, minKm: 30, stateSlug: "karnataka", stateName: "Karnataka", total: 80 },
+      { slug: "sirsi", name: "Sirsi", radiusKm: 200, minKm: 30, stateSlug: "karnataka", stateName: "Karnataka", total: 2 },
+    ]);
   });
 
   it("keep only origins with enough guided places around them", async () => {
-    expect(await tripOrigins()).toEqual([{ slug: "bengaluru", name: "Bengaluru", radiusKm: 350, total: 80, maxKm: 350 }]);
+    expect((await tripOrigins()).map((o) => o.slug)).toEqual(["bengaluru"]);
+    expect(apiGet).toHaveBeenCalledTimes(1);
     expect(await weekendTripCount("bengaluru")).toBe(80);
     expect(await weekendTripCount("sirsi")).toBeNull();
   });

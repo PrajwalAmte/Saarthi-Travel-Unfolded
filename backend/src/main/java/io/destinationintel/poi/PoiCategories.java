@@ -146,7 +146,9 @@ public final class PoiCategories {
      * Overture schema 2 categories (taxonomy.primary, falling back to basic_category), matched
      * exactly. Codes not listed are out of scope: services, offices, shops in general, sports
      * clubs, cinemas and ordinary places of worship (Overture carries no heritage signal for
-     * them; heritage temples come from Wikidata and ASI instead).
+     * them; heritage temples come from Wikidata and ASI instead). So is "historic_site": in India
+     * it mostly holds apartment blocks, housing societies and localities; real heritage sites
+     * come from OpenStreetMap, Wikidata and ASI.
      */
     private static final Map<String, Category> OVERTURE = Map.ofEntries(
             Map.entry("restaurant", c("restaurant", "eat")),
@@ -197,7 +199,6 @@ public final class PoiCategories {
             Map.entry("art_gallery", c("gallery", "see")),
             Map.entry("planetarium", c("museum", "see")),
             Map.entry("observatory", c("attraction", "see")),
-            Map.entry("historic_site", c("heritage_site", "see")),
             Map.entry("fort", c("fort", "see")),
             Map.entry("palace", c("palace", "see")),
             Map.entry("monument", c("monument", "see")),

@@ -2,6 +2,7 @@ package io.destinationintel.ingestion;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.destinationintel.ingestion.wikivoyage.AttributeDeriver;
 import io.destinationintel.ingestion.wikivoyage.WikiText;
 import io.destinationintel.ingestion.wikivoyage.WikivoyageArticleParser;
 import io.destinationintel.ingestion.wikivoyage.WikivoyageArticleParser.ParsedArticle;
@@ -105,6 +106,21 @@ class WikivoyageParsingTest {
         Map<String, Object> lake = entry(m, "Quiet Lake").entry().attributes();
         assertThat(lake.get("interests").toString()).contains("nature");
         assertThat(lake).doesNotContainKey("major");
+    }
+
+    private static String interests(String section, String title, String description) {
+        return String.valueOf(AttributeDeriver.derive(section, null, title, description, java.util.Optional.empty(), null,
+                java.util.List.of(), null, 100, "Wikivoyage").get("interests"));
+    }
+
+    @Test
+    void aBusinessIsNotTaggedFromANameOnlyFromOrdinaryWords() {
+        assertThat(interests("stay", "Hotel Grand Park", "Rooms near Church Street and Park Circus.")).doesNotContain("nature", "culture");
+        assertThat(interests("eat", "Fort View", "Biryani opposite the Museum Road market.").toString()).doesNotContain("culture");
+        assertThat(interests("stay", "Lakeside", "Rooms with lake views and a garden.")).contains("nature");
+        assertThat(interests("stay", "The Manor", "A boutique hotel near the market.")).as("not a place to shop").doesNotContain("shopping");
+        assertThat(interests("drink", "Hop Pub", "Craft beers.")).as("a bar's name says what it is").contains("nightlife");
+        assertThat(interests("see", "Nehru Park", "Old trees.")).as("a sight is what its name says").contains("nature");
     }
 
     @Test

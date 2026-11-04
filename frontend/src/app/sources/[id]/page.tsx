@@ -54,7 +54,7 @@ type Props = { params: Promise<{ id: string }> };
 
 export async function generateMetadata({ params }: Props) {
   const { id } = await params;
-  return { title: `Quality report: ${id}`, alternates: { canonical: `/sources/${id}` } };
+  return { title: `Import report: ${id}`, alternates: { canonical: `/sources/${id}` } };
 }
 
 function fmt(n: unknown) {
@@ -88,20 +88,21 @@ export default async function SourceQualityPage({ params }: Props) {
           Sources and licences
         </Link>
       </p>
-      <h1 className="mt-2 text-3xl font-semibold">Data quality: {id}</h1>
+      <h1 className="mt-2 text-3xl font-semibold">Import report: {id}</h1>
       {report ? (
         <>
           <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
             <Badge tone={report.status === "passed" ? "verified" : report.status === "warning" ? "stale" : "conflict"}>
               {report.status === "passed" ? "Passed" : report.status === "warning" ? "Passed with warnings" : "Failed: not published"}
             </Badge>
-            {report.score !== null ? <span>Score {report.score}</span> : null}
+            {report.score !== null ? <span>Import score {report.score}</span> : null}
             <span className="text-muted">Evaluated {formatDate(report.generatedAt)} · scope {report.scope}</span>
           </div>
           <p className="mt-3 text-sm text-ink-2">
             Every check is measured on the stored data against a threshold set for this source. Critical checks block
             publication; warnings are shown here but do not. The score is the mean of the components listed below and is
-            not adjusted to meet any threshold.
+            not adjusted to meet any threshold. It shows whether the import worked, not whether a listing is accurate or
+            worth visiting.
           </p>
 
           <section className="mt-8">

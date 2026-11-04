@@ -40,6 +40,14 @@ class ClassifierAndClimateTest {
     }
 
     @Test
+    void aLowerCaseLabelIsATopicNotAPlace() {
+        assertThat(PlaceKindClassifier.looksLikeTopic("festivals in Kerala")).isTrue();
+        assertThat(PlaceKindClassifier.looksLikeTopic("travel warning")).isTrue();
+        assertThat(PlaceKindClassifier.looksLikeTopic("Kevadia")).isFalse();
+        assertThat(PlaceKindClassifier.looksLikeTopic(null)).as("no label says nothing").isFalse();
+    }
+
+    @Test
     void parsesWikidataHelpers() {
         assertThat(WikidataClient.qid("http://www.wikidata.org/entity/Q10086")).isEqualTo("Q10086");
         assertThat(WikidataClient.qid("http://www.wikidata.org/entity/P31")).isNull();

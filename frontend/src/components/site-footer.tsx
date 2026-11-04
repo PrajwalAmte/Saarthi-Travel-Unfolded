@@ -8,7 +8,7 @@ export function SiteFooter() {
         <div className="space-y-2">
           <Brand />
           <p className="pt-1 text-muted">
-            A free, open-source travel guide to India, built from open data and the people who know each place.
+            A free, open-source travel guide to India, built from open data and open to corrections from people who know each place.
           </p>
         </div>
         <div className="space-y-2">
@@ -30,6 +30,16 @@ export function SiteFooter() {
                 Wikidata
               </a>{" "}
               (CC0)
+            </li>
+            <li>
+              Map places from{" "}
+              <a className="underline" href="https://www.openstreetmap.org/copyright" rel="noopener noreferrer">
+                OpenStreetMap
+              </a>{" "}
+              contributors (ODbL) and{" "}
+              <a className="underline" href="https://overturemaps.org/" rel="noopener noreferrer">
+                Overture Maps
+              </a>
             </li>
             <li>
               Weather data by{" "}

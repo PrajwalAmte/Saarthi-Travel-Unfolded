@@ -66,7 +66,7 @@ export default async function HomePage() {
           </h1>
           <p className="mt-4 max-w-2xl text-lg text-ink-2">
             Where to eat, where to stay, what to see, what things cost and how to get around — from open travel guides and
-            people who know each place.
+            open map data.
           </p>
           <div className="mt-8 max-w-3xl">
             <HomeSearch />
@@ -173,8 +173,8 @@ export default async function HomePage() {
             },
             {
               Icon: BadgeCheck,
-              title: "Kept current by locals",
-              text: "Travellers and residents confirm or correct details in one tap.",
+              title: "Open to correction",
+              text: "Travellers and residents can confirm or correct any detail in one tap.",
             },
             {
               Icon: HeartHandshake,

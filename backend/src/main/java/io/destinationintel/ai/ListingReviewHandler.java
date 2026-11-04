@@ -39,6 +39,8 @@ public class ListingReviewHandler implements JobHandler {
     /** Issues that make a listing doubtful. "too_thin" is recorded but only informs; it is not a defect to remove. */
     static final Set<String> FLAGGING_ISSUES = Set.of("wrong_section", "outside_destination", "about_another_business",
             "broken_text", "closed");
+    /** A description of this many words or fewer is too short to help a traveller decide. */
+    static final int THIN_WORDS = 5;
     /** Opening hours must contain a time of day ("9AM", "18:30", "noon", "24 hours"), not just a date or year. */
     static final java.util.regex.Pattern HOURS = java.util.regex.Pattern.compile(
             "(?i)(\\b\\d{1,2}([:.]\\d{2})?\\s*(am|pm|a\\.m\\.|p\\.m\\.)|\\b\\d{1,2}[:.]\\d{2}\\b|\\bnoon\\b|\\bmidnight\\b|\\bsunrise\\b|\\bsunset\\b|24 ?hours|24x7|24/7)");
@@ -299,6 +301,17 @@ public class ListingReviewHandler implements JobHandler {
         return stats;
     }
 
+    /** The model is inconsistent about the shortest listings, so these are marked by rule; it can still add longer ones. */
+    static List<String> withThinCheck(List<String> issues, String description) {
+        boolean thin = description == null || description.isBlank() || description.strip().split("\\s+").length <= THIN_WORDS;
+        if (!thin || issues.contains("too_thin")) {
+            return issues;
+        }
+        List<String> out = new ArrayList<>(issues);
+        out.add("too_thin");
+        return out;
+    }
+
     private void save(Listing l, UUID destinationId, Verdict v, String model, boolean isFlag) {
         UUID id = jdbc.sql("""
                         INSERT INTO ai_review (entry_id, destination_id, input_hash, prompt_version, model, fits_section, in_destination,
@@ -308,7 +321,7 @@ public class ListingReviewHandler implements JobHandler {
                         RETURNING id""")
                 .param("e", l.id()).param("d", destinationId).param("h", inputHash(l)).param("v", PROMPT_VERSION)
                 .param("m", model).param("fits", v.fitsSection()).param("inDest", v.inDestination())
-                .param("issues", String.join(",", v.issues())).param("suggested", v.suggestedSection())
+                .param("issues", String.join(",", withThinCheck(v.issues(), l.description()))).param("suggested", v.suggestedSection())
                 .param("conf", (float) v.confidence()).param("reason", v.reason()).param("flagged", isFlag)
                 .param("status", isFlag ? "open" : "clear")
                 .query(UUID.class).optional().orElse(null);

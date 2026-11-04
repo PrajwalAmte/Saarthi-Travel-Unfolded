@@ -52,6 +52,14 @@ public class WikivoyageQualityEvaluator implements SourceQualityEvaluator {
         long listingEntries = count("SELECT count(*) FROM guide_entry WHERE status = 'published' AND ingest_key LIKE 'wv:%' AND section <> 'neighbourhood'");
         checks.add(QualityCheck.atLeast("descriptions", "completeness", QualityCheck.WARNING,
                 "Listings with a description (%)", Pct.of(withDescription, listingEntries), 80, null));
+        long thin = count("""
+                SELECT count(*) FROM guide_entry e WHERE e.status = 'published' AND e.ingest_key LIKE 'wv:%' AND e.section <> 'neighbourhood'
+                  AND coalesce((SELECT max(array_length(regexp_split_to_array(trim(f.value_text), '\\s+'), 1)) FROM fact f
+                                WHERE f.entry_id = e.id AND f.kind = 'description' AND f.status = 'published'), 0) <= 5""");
+        m.put("thinListings", thin);
+        checks.add(QualityCheck.info("thin_listings", "completeness",
+                "Listings with no description or five words or fewer (%)", Pct.of(thin, listingEntries),
+                "accurate but too short to help a traveller decide"));
         long flagged = count("SELECT count(*) FROM guide_entry WHERE ingest_key LIKE 'wv:%' AND geo_flag IS NOT NULL");
         m.put("entriesWithImplausibleCoordinates", flagged);
         long withCoords = count("SELECT count(*) FROM guide_entry WHERE status = 'published' AND ingest_key LIKE 'wv:%' AND latitude IS NOT NULL");

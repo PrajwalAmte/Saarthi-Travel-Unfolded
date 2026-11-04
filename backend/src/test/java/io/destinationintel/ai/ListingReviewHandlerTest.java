@@ -31,6 +31,18 @@ class ListingReviewHandlerTest {
     }
 
     @Test
+    void theShortestListingsAreThinByRuleWhateverTheModelSaid() {
+        assertThat(ListingReviewHandler.withThinCheck(List.of(), "Italian style food.")).containsExactly("too_thin");
+        assertThat(ListingReviewHandler.withThinCheck(List.of(), null)).containsExactly("too_thin");
+        assertThat(ListingReviewHandler.withThinCheck(List.of("closed"), "  ")).containsExactly("closed", "too_thin");
+        assertThat(ListingReviewHandler.withThinCheck(List.of("too_thin"), "Short.")).containsExactly("too_thin");
+        assertThat(ListingReviewHandler.withThinCheck(List.of(), "A family-run place serving thalis near the bus stand."))
+                .as("longer text is left to the model").isEmpty();
+        assertThat(ListingReviewHandler.withThinCheck(List.of("too_thin"), "A family-run place serving thalis near the bus stand."))
+                .containsExactly("too_thin");
+    }
+
+    @Test
     void onlyConfidentDoubtsBecomeFlags() {
         assertThat(new ListingReviewHandler.Verdict(false, "yes", List.of("wrong_section"), "see", 0.9, "r").flagged(true)).isTrue();
         assertThat(new ListingReviewHandler.Verdict(false, "yes", List.of("wrong_section"), "see", 0.5, "r").flagged(true))

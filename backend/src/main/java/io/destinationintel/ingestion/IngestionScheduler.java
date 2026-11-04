@@ -124,6 +124,7 @@ public class IngestionScheduler {
                             JOIN place p ON p.id = s.place_id
                             LEFT JOIN destination_profile dp ON dp.place_id = p.id
                             WHERE s.source_id = 'wikivoyage-en' AND s.external_id = p.wikivoyage_title
+                              AND p.lifecycle_status = 'active'
                               AND (s.last_synced_at < now() - make_interval(days => :days)
                                    OR coalesce(s.parser_version, 0) <> :parser)
                               AND dp.graduated_at IS NULL
@@ -339,7 +340,8 @@ public class IngestionScheduler {
             return 0;
         }
         List<UUID> due = jdbc.sql("SELECT DISTINCT s.place_id FROM " + fromClause
-                        + " AND s.last_synced_at < now() - make_interval(days => :days)")
+                        + " AND s.last_synced_at < now() - make_interval(days => :days)"
+                        + " AND EXISTS (SELECT 1 FROM place active WHERE active.id = s.place_id AND active.lifecycle_status = 'active')")
                 .param("days", interval).query(UUID.class).list();
         due.forEach(id -> jobs.enqueue(jobType, sourceId, id, Map.of(), jobType + ":" + id, 1, createdBy));
         return due.size();

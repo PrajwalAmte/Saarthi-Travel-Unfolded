@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -46,6 +47,13 @@ public final class AttributeDeriver {
                 "science center", "kids", "children's", "family-friendly", "family friendly", "toy train", "water park",
                 "playground", "theme park"));
     }
+
+    /**
+     * Sections that list businesses. Their names and addresses borrow words like "park" or "palace"
+     * (Hotel Grand Park, Church Street), so an interest counts only when the description uses the
+     * word in lower case, as an ordinary word.
+     */
+    private static final Set<String> BUSINESS_SECTIONS = Set.of("eat", "drink", "stay", "buy");
 
     private static final List<String> REGIONAL_TERMS = List.of("local", "traditional", "authentic", "regional",
             "home-style", "homestyle", "home style", "heritage", "ethnic", "native", "village-style");
@@ -98,7 +106,14 @@ public final class AttributeDeriver {
             if (e.getKey().equals("nightlife") && !section.equals("drink") && !section.equals("do")) {
                 continue;
             }
-            firstTerm(text, e.getValue()).ifPresent(term -> interests.add(Map.of("tag", e.getKey(),
+            // A "boutique hotel" or one near a market is not a place to shop.
+            if (e.getKey().equals("shopping") && section.equals("stay")) {
+                continue;
+            }
+            // A bar's name does say what it is, so nightlife keeps reading the title.
+            boolean ordinaryWordsOnly = BUSINESS_SECTIONS.contains(section) && !e.getKey().equals("nightlife");
+            String haystack = ordinaryWordsOnly ? (description == null ? "" : description) : text;
+            firstTerm(haystack, e.getValue()).ifPresent(term -> interests.add(Map.of("tag", e.getKey(),
                     "basis", "Source text mentions “" + term + "”")));
         }
         if (!interests.isEmpty()) {

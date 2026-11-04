@@ -160,6 +160,24 @@
           </systemPropertyVariables>
         </configuration>
       </plugin>
+      <!-- Runs the *IT classes during mvn verify; surefire only picks up *Test. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <configuration>
+          <systemPropertyVariables>
+            <test.postgis.image>${env.TEST_POSTGIS_IMAGE}</test.postgis.image>
+          </systemPropertyVariables>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>integration-test</goal>
+              <goal>verify</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
   </build>
 </project>

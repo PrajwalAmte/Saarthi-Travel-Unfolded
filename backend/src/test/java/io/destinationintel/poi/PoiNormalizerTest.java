@@ -81,6 +81,7 @@ class PoiNormalizerTest {
         assertThat(PoiCategories.fromOverture("coffee_shop", "coffee_shop")).contains(new PoiCategories.Category("cafe", "drink"));
         assertThat(PoiCategories.fromOverture("beach_resort", "resort")).contains(new PoiCategories.Category("resort", "stay"));
         assertThat(PoiCategories.fromOverture("palace", "historic_site")).contains(new PoiCategories.Category("palace", "see"));
+        assertThat(PoiCategories.fromOverture("historic_site", "historic_site")).as("mostly apartment blocks in India").isEmpty();
         assertThat(PoiCategories.fromOverture("bus_station", "public_transit_facility_or_service"))
                 .contains(new PoiCategories.Category("bus_station", "transport"));
         assertThat(PoiCategories.fromOverture("hindu_place_of_worship", "hindu_place_of_worship")).isEmpty();

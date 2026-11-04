@@ -48,6 +48,14 @@ public final class PlaceKindClassifier {
 
     private PlaceKindClassifier() {}
 
+    /**
+     * Wikidata writes the English label of a topic in lower case ("cinema of India", "travel
+     * warning") and the name of a place with a capital, so a lower-case label is not a destination.
+     */
+    public static boolean looksLikeTopic(String englishLabel) {
+        return englishLabel != null && !englishLabel.isEmpty() && Character.isLowerCase(englishLabel.charAt(0));
+    }
+
     public static Optional<String> classify(Collection<String> typeLabels, String wikivoyageTitle) {
         List<String> labels = typeLabels.stream().filter(l -> l != null && !l.isBlank())
                 .map(l -> l.toLowerCase(Locale.ROOT)).toList();

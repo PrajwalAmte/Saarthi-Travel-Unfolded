@@ -21,10 +21,10 @@ const RUN_STATUS: Record<string, string> = {
 };
 
 function QualityBadge({ status, score }: { status: string; score: number | null }) {
-  if (status === "passed") return <Badge tone="verified">Quality checks passed{score !== null ? ` · ${score}` : ""}</Badge>;
-  if (status === "warning") return <Badge tone="stale">Quality warnings{score !== null ? ` · ${score}` : ""}</Badge>;
-  if (status === "failed") return <Badge tone="conflict">Quality checks failed: not published</Badge>;
-  return <Badge>Quality not evaluated</Badge>;
+  if (status === "passed") return <Badge tone="verified">Import checks passed{score !== null ? ` · ${score}` : ""}</Badge>;
+  if (status === "warning") return <Badge tone="stale">Import warnings{score !== null ? ` · ${score}` : ""}</Badge>;
+  if (status === "failed") return <Badge tone="conflict">Import checks failed: not published</Badge>;
+  return <Badge>Import checks not run</Badge>;
 }
 
 export default async function SourcesPage() {
@@ -40,7 +40,9 @@ export default async function SourcesPage() {
       <p className="mt-3 text-ink-2">
         Every fact in a guide links back to one of these sources. The software is Apache-2.0; the data keeps the licence of the
         source it came from, and contributions are CC BY-SA 4.0. Sync health is shown as recorded by the ingestion jobs; every
-        import is checked by a source-specific quality gate, and data from a source whose checks fail is not published.
+        import is checked against rules set for its source, and data from a source whose checks fail is not published. The
+        checks and scores show whether an import worked: records are valid, traceable and not duplicated. They do not measure
+        whether a listing is accurate or worth visiting.
       </p>
       {!status ? (
         <Notice tone="error" className="mt-6">
@@ -57,7 +59,7 @@ export default async function SourcesPage() {
                     <p className="text-sm text-muted">{s.attribution}</p>
                     {s.qualityReportId || s.latestRun ? (
                       <Link href={`/sources/${s.id}`} className="text-sm underline">
-                        Quality report and sync runs
+                        Import report and sync runs
                       </Link>
                     ) : null}
                   </div>

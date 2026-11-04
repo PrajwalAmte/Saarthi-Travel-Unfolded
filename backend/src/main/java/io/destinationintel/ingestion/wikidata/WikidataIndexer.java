@@ -255,6 +255,10 @@ public class WikidataIndexer {
             reject(run, counts, c.qid(), "outside_india");
             return Optional.empty();
         }
+        if (PlaceKindClassifier.looksLikeTopic(info.englishLabel())) {
+            reject(run, counts, c.qid(), "not_a_destination");
+            return Optional.empty();
+        }
         boolean existed = places.findByWikidataId(c.qid()).isPresent();
         String wvTitle = c.wikivoyageTitle() != null ? c.wikivoyageTitle() : info.wikivoyageTitle();
         String name = info.englishLabel();

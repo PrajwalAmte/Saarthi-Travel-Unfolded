@@ -19,8 +19,8 @@ const STEPS = [
   },
   {
     Icon: Users,
-    title: "People who know the place keep it current",
-    text: "Travellers and locals confirm what's still right, fix what changed and add places that are missing.",
+    title: "People who know the place can correct it",
+    text: "Travellers and locals can confirm what's still right, fix what changed and add places that are missing. Guides say when a detail has not been confirmed by a local.",
   },
   {
     Icon: BadgeCheck,
@@ -58,7 +58,7 @@ export default async function AboutPage() {
     <div className="container-page max-w-4xl py-12">
       <h1 className="text-4xl font-semibold sm:text-5xl">How Saarthi works</h1>
       <p className="mt-4 max-w-2xl text-lg text-ink-2">
-        A free travel guide to India, made from open data and improved by people who know each place. No ads, no paid
+        A free travel guide to India, made from open data and open to corrections from people who know each place. No ads, no paid
         rankings, nothing made up.
       </p>
 

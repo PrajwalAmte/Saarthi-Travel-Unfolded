@@ -42,7 +42,7 @@ public class WikivoyageClient {
         q.put("maxlag", "5");
         JsonNode root = mapper.readTree(http.get(apiUrl, q, "application/json"));
         if (root.has("error")) {
-            throw new HttpFetcher.FetchException("Wikivoyage API error: " + root.path("error").path("code").asString(), 200);
+            throw HttpFetcher.mediaWikiError("Wikivoyage", root.path("error").path("code").asString());
         }
         JsonNode page = root.path("query").path("pages").path(0);
         if (page.isMissingNode() || page.path("missing").asBoolean(false) || page.path("invalid").asBoolean(false)) {
@@ -69,6 +69,9 @@ public class WikivoyageClient {
         q.put("formatversion", "2");
         q.put("maxlag", "5");
         JsonNode root = mapper.readTree(http.get(apiUrl, q, "application/json"));
+        if (root.has("error")) {
+            throw HttpFetcher.mediaWikiError("Wikivoyage", root.path("error").path("code").asString());
+        }
         Map<String, double[]> out = new HashMap<>();
         for (JsonNode page : root.path("query").path("pages")) {
             JsonNode c = page.path("coordinates").path(0);
@@ -89,6 +92,9 @@ public class WikivoyageClient {
         q.put("formatversion", "2");
         q.put("maxlag", "5");
         JsonNode root = mapper.readTree(http.get(apiUrl, q, "application/json"));
+        if (root.has("error")) {
+            throw HttpFetcher.mediaWikiError("Wikivoyage", root.path("error").path("code").asString());
+        }
         JsonNode page = root.path("query").path("pages").path(0);
         if (page.isMissingNode() || page.path("missing").asBoolean(false) || page.path("invalid").asBoolean(false)) {
             return Optional.empty();
@@ -118,7 +124,7 @@ public class WikivoyageClient {
         for (int round = 0; round < 20; round++) {
             JsonNode root = mapper.readTree(http.get(apiUrl, q, "application/json"));
             if (root.has("error")) {
-                throw new HttpFetcher.FetchException("Wikivoyage API error: " + root.path("error").path("code").asString(), 200);
+                throw HttpFetcher.mediaWikiError("Wikivoyage", root.path("error").path("code").asString());
             }
             for (JsonNode n : root.path("query").path("normalized")) {
                 String from = asked.remove(n.path("from").asString());

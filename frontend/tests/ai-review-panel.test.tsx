@@ -190,4 +190,15 @@ describe("AiReviewPanel", () => {
     await userEvent.click(undo[0]!);
     await waitFor(() => expect(spy.mock.calls.some(([u, i]) => String(u).endsWith("/checks/c1/undo") && i?.method === "POST")).toBe(true));
   });
+
+  it("lets the admin move any flagged listing to a section of their choice", async () => {
+    const spy = mockApi(usage, [flag]);
+    render(<AiReviewPanel />);
+    const picker = await screen.findByRole("combobox", { name: "Move Qutub Minar to another section" });
+    expect(screen.queryByRole("option", { name: "places to eat" })).not.toBeInTheDocument();
+    await userEvent.selectOptions(picker, "stay");
+    await waitFor(() =>
+      expect(spy.mock.calls.some(([u, i]) => String(u).endsWith("/flags/f1/move") && String(i?.body).includes('"section":"stay"'))).toBe(true),
+    );
+  });
 });

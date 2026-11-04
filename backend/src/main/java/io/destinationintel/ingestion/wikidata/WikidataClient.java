@@ -81,7 +81,7 @@ public class WikidataClient {
         q.put("maxlag", "5");
         JsonNode root = mapper.readTree(http.get(apiUrl, q, "application/json"));
         if (root.has("error")) {
-            throw new HttpFetcher.FetchException("Wikidata API error: " + root.path("error").path("code").asString(), 200);
+            throw HttpFetcher.mediaWikiError("Wikidata", root.path("error").path("code").asString());
         }
         return root.path("entities");
     }

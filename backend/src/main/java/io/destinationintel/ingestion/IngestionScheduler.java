@@ -164,6 +164,7 @@ public class IngestionScheduler {
         plan.put("nearestTransport", nearestTransport(createdBy));
         plan.put("wikivoyageRedirects", wikivoyageRedirects(createdBy));
         plan.put("unresolvedRetried", retryUnresolved(createdBy));
+        plan.put("stalledRequestsRetried", retryStalledRequests(createdBy));
 
         if (config.runs("coverage_refresh")) {
             jobs.enqueue("coverage_refresh", null, null, Map.of(), "coverage_refresh:all", 0, createdBy);
@@ -197,7 +198,9 @@ public class IngestionScheduler {
                               AND ST_DWithin(p.geog, centre.geog, :metres)
                               AND NOT EXISTS (SELECT 1 FROM place_source_sync s WHERE s.place_id = p.id AND s.source_id = 'wikivoyage-en')
                               AND NOT EXISTS (SELECT 1 FROM ingestion_job j WHERE j.target_place_id = p.id AND j.job_type = 'wikivoyage_guide'
-                                              AND (j.status IN ('queued', 'running') OR j.created_at > now() - interval '7 days'))
+                                              AND (j.status IN ('queued', 'running')
+                                                   OR (j.created_at > now() - interval '7 days'
+                                                       AND NOT (j.status = 'failed' AND j.last_error LIKE '%maxlag%'))))
                             ORDER BY ST_Distance(p.geog, centre.geog) <= :near DESC, coalesce(p.sitelink_count, 0) DESC, p.name
                             LIMIT :n""")
                     .param("slug", slug).param("metres", km * 1000).param("near", Math.min(km, 150) * 1000)
@@ -230,6 +233,29 @@ public class IngestionScheduler {
                 .query(UUID.class).list();
         stuck.forEach(id -> jobs.enqueue("resolve_request", "wikidata", null, Map.of("requestId", id.toString()), "resolve_request:" + id, 1, createdBy));
         return stuck.size();
+    }
+
+    /**
+     * Requests left "processing" because their guide job failed on a temporary error (the service was busy, a timeout):
+     * the requester is still waiting, so the guide is tried again. Permanent failures are not retried.
+     */
+    private int retryStalledRequests(String createdBy) {
+        if (!config.runs("wikivoyage_guide")) {
+            return 0;
+        }
+        List<Map<String, Object>> stalled = jdbc.sql("""
+                        SELECT r.id, r.resolved_place_id FROM destination_request r JOIN ingestion_job j ON j.id = r.last_job_id
+                        WHERE r.status = 'processing' AND r.resolved_place_id IS NOT NULL AND j.status = 'failed'
+                          AND j.last_error LIKE 'FetchException%' AND r.first_requested_at > now() - interval '30 days'
+                        ORDER BY r.last_requested_at DESC LIMIT 20""")
+                .query().listOfRows();
+        for (Map<String, Object> r : stalled) {
+            UUID place = (UUID) r.get("resolved_place_id");
+            UUID job = jobs.enqueue("wikivoyage_guide", "wikivoyage-en", place, Map.of(), "wikivoyage_guide:" + place, 20, createdBy);
+            jdbc.sql("UPDATE destination_request SET last_job_id = :j, updated_at = now() WHERE id = :id")
+                    .param("j", job).param("id", r.get("id")).update();
+        }
+        return stalled.size();
     }
 
     /** Search names from Wikivoyage redirects, refreshed monthly (about 40 small requests for the whole country). */

@@ -314,6 +314,25 @@ export function AiReviewPanel() {
                 <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void act(f.id, () => api(`/api/admin/ai-review/flags/${f.id}/dismiss`, { method: "POST" }))}>
                   Keep it
                 </Button>
+                <select
+                  aria-label={`Move ${f.title} to another section`}
+                  className="h-8 rounded-md border border-line bg-surface px-2 text-sm text-ink-2"
+                  disabled={busy !== null}
+                  value=""
+                  onChange={(e) => {
+                    const section = e.target.value;
+                    if (section) void act(f.id, () => api(`/api/admin/ai-review/flags/${f.id}/move`, { method: "POST", body: { section } }));
+                  }}
+                >
+                  <option value="">Move to…</option>
+                  {Object.entries(SECTION_TEXT)
+                    .filter(([key]) => key !== f.section)
+                    .map(([key, label]) => (
+                      <option key={key} value={key}>
+                        {label}
+                      </option>
+                    ))}
+                </select>
               </div>
             </li>
           ))}

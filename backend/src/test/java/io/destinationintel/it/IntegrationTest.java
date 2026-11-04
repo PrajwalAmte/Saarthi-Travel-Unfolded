@@ -95,11 +95,11 @@ public abstract class IntegrationTest {
 
     @BeforeEach
     void resetDatabase() {
-        jdbc.sql("""
+        truncateWithRetry("""
                 TRUNCATE place, app_user, ingestion_job, destination_request, audit_log, login_token,
                          spring_session, source_sync_run, quality_report, poi_match_review, poi_source_record, poi,
                          place_source_identity, importer_heartbeat, ai_review, airport, air_quality_cell CASCADE
-                """).update();
+                """);
         jdbc.sql("""
                 UPDATE source SET enabled = true, last_success_at = NULL, last_error = NULL, last_error_at = NULL,
                        consecutive_failures = 0, last_publication_at = NULL, quality_status = 'not_evaluated',
@@ -107,6 +107,20 @@ public abstract class IntegrationTest {
         caches.getCacheNames().forEach(n -> caches.getCache(n).clear());
         mail.sent.clear();
         SourceStub.get().article("Testville", new SourceStub.Article(42, 1001, "2026-10-01T00:00:00Z", "testville-v1.wiki"));
+    }
+
+    /** A background task in another cached test context can briefly hold locks; the reset simply tries again. */
+    private void truncateWithRetry(String sql) {
+        for (int attempt = 1; ; attempt++) {
+            try {
+                jdbc.sql(sql).update();
+                return;
+            } catch (org.springframework.dao.PessimisticLockingFailureException e) {
+                if (attempt == 5) {
+                    throw e;
+                }
+            }
+        }
     }
 
     /** Indexes a state and the fictional city "Testville" (fixture data, tests only). */

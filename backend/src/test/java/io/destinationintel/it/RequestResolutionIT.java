@@ -100,6 +100,40 @@ class RequestResolutionIT extends IntegrationTest {
     }
 
     @Test
+    void aBusyWikivoyageMakesTheJobWaitInsteadOfDeclaringThePlaceNotFound() throws Exception {
+        UUID testville = seedTestvillePlace();
+        SourceStub.get().redirects.put("Testville", java.util.List.of("Statue of Testville"));
+        SourceStub.get().mediaWikiBusy = true;
+        String code;
+        try {
+            code = submit("{\"query\":\"Statue of Testville\"}");
+            assertThat(field(code, "status")).as("not 'unresolvable'").isEqualTo("queued");
+            assertThat(jdbc.sql("SELECT status FROM ingestion_job WHERE job_type = 'resolve_request'").query(String.class).single())
+                    .as("waits without using up an attempt").isEqualTo("queued");
+        } finally {
+            SourceStub.get().mediaWikiBusy = false;
+        }
+        jdbc.sql("UPDATE ingestion_job SET next_attempt_at = now() WHERE job_type = 'resolve_request'").update();
+        drainResolve();
+        assertThat(field(code, "resolved_place_id")).isEqualTo(testville.toString());
+    }
+
+    @Test
+    void aGuideThatFailedOnATemporaryErrorIsTriedAgainForTheWaitingRequester() throws Exception {
+        seedTestvillePlace();
+        String code = submit("{\"query\":\"Testpura\"}");
+        assertThat(field(code, "status")).isEqualTo("processing");
+        jdbc.sql("""
+                UPDATE ingestion_job SET status = 'failed', finished_at = now(), last_error = 'FetchException: Wikidata API error: timeout'
+                WHERE job_type = 'wikivoyage_guide'""").update();
+
+        assertThat(scheduler.planRefreshes("scheduler").get("stalledRequestsRetried")).isEqualTo(1);
+        assertThat(jdbc.sql("SELECT count(*) FROM ingestion_job WHERE job_type = 'wikivoyage_guide' AND status = 'queued'")
+                .query(Integer.class).single()).isEqualTo(1);
+        assertThat(scheduler.planRefreshes("scheduler").get("stalledRequestsRetried")).as("already queued again").isEqualTo(0);
+    }
+
+    @Test
     void titlesAreCasedTheWayWikivoyageWritesThem() {
         assertThat(io.destinationintel.request.ResolveRequestHandler.titleCase("statue of unity")).isEqualTo("Statue of Unity");
     }

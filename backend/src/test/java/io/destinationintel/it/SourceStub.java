@@ -26,6 +26,8 @@ public final class SourceStub {
     private final Map<String, Article> articles = new ConcurrentHashMap<>();
     public final AtomicInteger requests = new AtomicInteger();
     public final AtomicInteger osrmRequests = new AtomicInteger();
+    /** When set, Wikivoyage answers "maxlag": busy, try again later. */
+    public volatile boolean mediaWikiBusy;
     /** Wikivoyage article coordinates (lat, lon), by title. */
     public final Map<String, double[]> articleCoordinates = new ConcurrentHashMap<>();
     /** Wikidata search results as raw JSON objects, by search text. */
@@ -54,6 +56,10 @@ public final class SourceStub {
         }
         server.createContext("/wv/api.php", exchange -> {
             requests.incrementAndGet();
+            if (mediaWikiBusy) {
+                respond(exchange, "{\"error\":{\"code\":\"maxlag\",\"info\":\"Waiting for a database server\"}}");
+                return;
+            }
             Map<String, String> q = query(exchange.getRequestURI().getRawQuery());
             if ("coordinates".equals(q.get("prop"))) {
                 StringBuilder pages = new StringBuilder();

@@ -49,7 +49,11 @@ public class FlagDecider {
                            double confidence, Double distanceM) {
         boolean closed = issues.contains("closed");
         boolean elsewhere = "no".equals(inDestination) || issues.contains("outside_destination");
-        boolean wrongSection = issues.contains("wrong_section") || !fitsSection;
+        boolean saysWrongSection = issues.contains("wrong_section") || !fitsSection;
+        // "Wrong section", yet the section it suggests is the one the listing is in: the reviewer contradicts itself and
+        // its reasons usually confirm the listing ("provides rooms, making it a hotel" under places to stay).
+        boolean selfContradicted = saysWrongSection && section != null && section.equals(suggested);
+        boolean wrongSection = saysWrongSection && !selfContradicted;
         boolean notAPlace = wrongSection && "none".equals(suggested);
         if ((closed || elsewhere || notAPlace) && confidence >= HIDE_CONFIDENCE) {
             if (elsewhere && !closed && !notAPlace && distanceM != null && distanceM <= IN_DESTINATION_METRES) {
@@ -62,8 +66,11 @@ public class FlagDecider {
             return Decision.MOVE;
         }
         if (!wrongSection && !closed && !elsewhere
-                && (issues.contains("broken_text") || issues.contains("about_another_business"))) {
+                && (issues.contains("broken_text") || issues.contains("about_another_business") || issues.contains("too_thin"))) {
             return Decision.NOTE;
+        }
+        if (selfContradicted && !closed && !elsewhere) {
+            return Decision.KEEP;
         }
         return Decision.ASK;
     }
@@ -72,7 +79,7 @@ public class FlagDecider {
     public Optional<Decision> apply(UUID flagId) {
         Candidate c = jdbc.sql("""
                         SELECT r.id, e.section, r.fits_section, r.in_destination, array_to_string(r.issues, ',') AS issues,
-                               r.suggested_section, r.confidence,
+                               r.suggested_section, round(r.confidence::numeric, 2)::double precision AS confidence,
                                CASE WHEN e.geog IS NOT NULL AND p.geog IS NOT NULL THEN ST_Distance(e.geog, p.geog) END AS distance_m
                         FROM ai_review r JOIN guide_entry e ON e.id = r.entry_id JOIN place p ON p.id = r.destination_id
                         WHERE r.id = :id AND r.status = 'open' AND e.status = 'published'""")

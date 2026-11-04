@@ -24,8 +24,15 @@ class FlagDeciderTest {
         assertThat(FlagDecider.decide("stay", false, "yes", List.of("wrong_section"), "eat", 0.75, null)).isEqualTo(ASK);
         assertThat(FlagDecider.decide("buy", false, "yes", List.of("wrong_section"), "none", 0.85, null))
                 .as("hiding needs more certainty than moving").isEqualTo(ASK);
-        assertThat(FlagDecider.decide("eat", false, "yes", List.of("wrong_section"), "eat", 0.95, null))
-                .as("no better section named").isEqualTo(ASK);
+    }
+
+    @Test
+    void aReviewerThatContradictsItselfLeavesTheListingAlone() {
+        // "Wrong section" while suggesting the section it is already in: "provides rooms, making it a hotel".
+        assertThat(FlagDecider.decide("stay", false, "yes", List.of("wrong_section"), "stay", 0.9, null)).isEqualTo(KEEP);
+        assertThat(FlagDecider.decide("eat", false, "unclear", List.of("too_thin"), "eat", 1.0, null)).as("very short text").isEqualTo(NOTE);
+        assertThat(FlagDecider.decide("stay", false, "no", List.of("wrong_section", "outside_destination"), "stay", 0.95, 120_000.0))
+                .as("other problems still count").isEqualTo(HIDE);
     }
 
     @Test

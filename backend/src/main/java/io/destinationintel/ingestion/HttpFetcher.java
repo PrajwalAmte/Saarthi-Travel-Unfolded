@@ -45,6 +45,15 @@ public class HttpFetcher {
         }
     }
 
+    /**
+     * An error reported in a MediaWiki API answer. "maxlag" and "ratelimited" mean the service is busy and asks for a
+     * retry later, so they count as rate limiting (HTTP 429): the job waits instead of using up its attempts.
+     */
+    public static FetchException mediaWikiError(String service, String code) {
+        boolean busy = "maxlag".equals(code) || "ratelimited".equals(code);
+        return new FetchException(service + " API error: " + code, busy ? 429 : 200);
+    }
+
     private final HttpClient client;
     private final String userAgent;
     private final Duration timeout;

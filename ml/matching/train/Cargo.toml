@@ -1,0 +1,21 @@
+[package]
+name = "saarthi-matching-train"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Fine-tunes a small cross-encoder for Saarthi's place matching, on the Apple GPU through Burn"
+publish = false
+
+[dependencies]
+burn = { version = "0.22", default-features = false, features = ["std", "autodiff", "flex", "fusion", "optim"] }
+csv = "1.3"
+safetensors = "0.6"
+serde_json = "1"
+tokenizers = "0.23"
+
+# The GPU backend is only built on a Mac; elsewhere the model runs on the pure-Rust CPU backend.
+[target.'cfg(target_os = "macos")'.dependencies]
+burn = { version = "0.22", default-features = false, features = ["metal"] }
+
+[profile.release]
+debug = false

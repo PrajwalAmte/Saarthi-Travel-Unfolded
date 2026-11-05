@@ -14,15 +14,18 @@ import java.util.Set;
  * audited and its precision sampled per rule.
  *
  * <ol>
- *   <li>Different kinds of place are distinct, except a hotel and an eatery with matching names close
- *       together: in Indian usage a "hotel" is often a restaurant, and sources disagree.</li>
+ *   <li>Different kinds of place are distinct, except two cases where sources disagree about one place: a
+ *       hotel and an eatery with matching names close together, as in Indian usage a "hotel" is often a
+ *       restaurant, and a hotel and a sight with one heritage name at one spot, as with a palace hotel.</li>
  *   <li>A chain brand (not a booking aggregator) more than 75 m away is another branch; chains share
- *       head-office phone numbers and websites, so these say nothing about identity.</li>
- *   <li>A shared phone number or website is the same place (aggregator call centres and booking
- *       platforms excluded).</li>
+ *       head-office phone numbers and websites, so these say nothing about identity. A hotel with matching
+ *       names is the exception: a chain's hotels are named apart, usually by their location.</li>
+ *   <li>A shared phone number is the same place (aggregator call centres excluded). So is a shared website
+ *       (booking platforms excluded) when the names agree too, because a group's hotels can share one site.</li>
  *   <li>The same core name (generic words, spacing, punctuation and listing numbers removed) within
  *       75 m is the same place.</li>
- *   <li>Both sides list their own phone numbers, none shared, more than 75 m apart: distinct.</li>
+ *   <li>Both sides list their own phone numbers, none shared, more than 75 m apart: distinct, unless the
+ *       names agree. Places often have several numbers, and each source may hold a different one.</li>
  *   <li>The same core name within 400 m is the same place.</li>
  *   <li>A core name one or two letters apart (transliteration, typos) within 150 m, or one letter apart
  *       for longer names within 400 m, is the same place.</li>
@@ -90,17 +93,19 @@ public final class MatchEvidence {
             "youtube.com", "twitter.com", "x.com", "linkedin.com", "magicpin.in", "dineout.co.in", "yatra.com",
             "cleartrip.com", "trivago.in", "hotels.com", "treebo.com", "fabhotels.com");
 
+    /** Words marking a heritage building, which can also be a hotel: "Noor-Us-Sabah Palace". */
+    private static final Set<String> HERITAGE_NAMES = Set.of("palace", "fort", "haveli", "mahal", "castle", "kothi", "garh");
+
     private MatchEvidence() {}
 
     public static Decision decide(Side record, Side candidate, double distanceM) {
         String a = core(record.name());
         String b = core(candidate.name());
         boolean usable = a.length() >= 3 && b.length() >= 3;
-        if (!PoiCategories.compatibleGroups(record.group(), candidate.group())
-                && !(hotelOrEatery(record.group(), candidate.group()) && distanceM <= 75 && usable && namesClose(a, b))) {
+        if (!PoiCategories.compatibleGroups(record.group(), candidate.group()) && !sameListingAcrossKinds(record, candidate, a, b, usable, distanceM)) {
             return new Decision(Outcome.DISTINCT, "different_kind_of_place");
         }
-        if ((record.chain() || candidate.chain()) && distanceM > 75) {
+        if ((record.chain() || candidate.chain()) && distanceM > 75 && !sameChainHotel(record, candidate, a, b, usable, distanceM)) {
             return new Decision(Outcome.DISTINCT, "chain_branch");
         }
         Set<String> pa = record.aggregated() ? Set.of() : phones(record.phones());
@@ -110,13 +115,13 @@ public final class MatchEvidence {
         }
         Set<String> wa = record.aggregated() ? Set.of() : domains(record.websites());
         Set<String> wb = candidate.aggregated() ? Set.of() : domains(candidate.websites());
-        if (overlaps(wa, wb)) {
+        if (overlaps(wa, wb) && websiteNamesAgree(record, candidate, a, b, usable, distanceM)) {
             return new Decision(Outcome.SAME, "shared_website");
         }
         if (usable && distanceM <= 75 && (a.equals(b) || reordered(record.name(), b) || reordered(candidate.name(), a))) {
             return new Decision(Outcome.SAME, "same_name_same_spot");
         }
-        if (!pa.isEmpty() && !pb.isEmpty() && distanceM > 75) {
+        if (!pa.isEmpty() && !pb.isEmpty() && distanceM > 75 && !phonesCanDiffer(record, candidate, a, b, usable, distanceM)) {
             return new Decision(Outcome.DISTINCT, "different_phones");
         }
         if (usable && a.equals(b) && distanceM <= 400) {
@@ -167,9 +172,77 @@ public final class MatchEvidence {
         return false;
     }
 
+    private static boolean sameChainHotel(Side record, Side candidate, String a, String b, boolean usable, double distanceM) {
+        return usable && distanceM <= 400 && "stay".equals(record.group()) && "stay".equals(candidate.group())
+                && (a.equals(b) || (Math.min(a.length(), b.length()) >= 8 && levenshtein(a, b, 2) <= 2));
+    }
+
+    /** Recorded next to the real decision and never changing it, until there is evidence that it should. */
+    public static final String SHADOW_RULE = "name_words_shadow";
+
+    /**
+     * What a looser name rule would decide for pairs now called "names_differ": "falls" and "waterfalls" as
+     * one word, then every identifying word of the shorter name found in the longer within 150 m, or at
+     * least two shared words with eight or more letters within 75 m.
+     */
+    public static boolean shadowNameMatch(String n1, String n2, double distanceM) {
+        List<String> w1 = withSynonyms(identifyingWords(n1));
+        List<String> w2 = withSynonyms(identifyingWords(n2));
+        List<String> shorter = w1.size() <= w2.size() ? w1 : w2;
+        List<String> longer = shorter == w1 ? w2 : w1;
+        Set<String> common = new HashSet<>();
+        for (String w : shorter) {
+            if (longer.stream().anyMatch(l -> l.equals(w) || (Math.min(w.length(), l.length()) >= 4 && levenshtein(w, l, 1) <= 1))) {
+                common.add(w);
+            }
+        }
+        boolean allFound = !shorter.isEmpty() && common.size() == new HashSet<>(shorter).size() && String.join("", shorter).length() >= 4;
+        return (distanceM <= 150 && allFound) || (distanceM <= 75 && common.size() >= 2 && String.join("", common).length() >= 8);
+    }
+
+    private static List<String> withSynonyms(List<String> words) {
+        return words.stream().map(w -> w.equals("waterfalls") || w.equals("waterfall") ? "falls" : w).toList();
+    }
+
     private static boolean hotelOrEatery(String g1, String g2) {
         Set<String> pair = Set.of(g1 == null ? "" : g1, g2 == null ? "" : g2);
         return pair.contains("stay") && (pair.contains("eat") || pair.contains("drink"));
+    }
+
+    private static boolean sameListingAcrossKinds(Side record, Side candidate, String a, String b, boolean usable, double distanceM) {
+        if (!usable) {
+            return false;
+        }
+        if (hotelOrEatery(record.group(), candidate.group())) {
+            return (distanceM <= 75 && namesClose(a, b)) || (distanceM <= 200 && a.equals(b));
+        }
+        Set<String> groups = Set.of(String.valueOf(record.group()), String.valueOf(candidate.group()));
+        return groups.equals(Set.of("stay", "see")) && distanceM <= 75 && a.equals(b) && heritageName(record.name());
+    }
+
+    private static boolean heritageName(String name) {
+        return name != null && List.of(name.toLowerCase(Locale.ROOT).split("[^\\p{L}]+")).stream().anyMatch(HERITAGE_NAMES::contains);
+    }
+
+    /** One name anywhere in range, or a shared identifying word close by: a group's other hotels fail both. */
+    private static boolean websiteNamesAgree(Side record, Side candidate, String a, String b, boolean usable, double distanceM) {
+        return (usable && a.equals(b) && distanceM <= 400) || (distanceM <= 150 && shareIdentifyingWord(record.name(), candidate.name()));
+    }
+
+    private static boolean shareIdentifyingWord(String n1, String n2) {
+        List<String> other = identifyingWords(n2);
+        return identifyingWords(n1).stream().anyMatch(w -> other.stream()
+                .anyMatch(l -> l.equals(w) || (Math.min(w.length(), l.length()) >= 4 && levenshtein(w, l, 1) <= 1)));
+    }
+
+    /** Hotels keep one name, so it counts at any distance in range; shops often have same-named outlets, so only close by. */
+    private static boolean phonesCanDiffer(Side record, Side candidate, String a, String b, boolean usable, double distanceM) {
+        if (!usable) {
+            return false;
+        }
+        boolean hotels = "stay".equals(record.group()) && "stay".equals(candidate.group());
+        return (a.equals(b) && (hotels || distanceM <= 150))
+                || (Math.min(a.length(), b.length()) >= 6 && distanceM <= 150 && levenshtein(a, b, 1) <= 1);
     }
 
     private static boolean namesClose(String a, String b) {

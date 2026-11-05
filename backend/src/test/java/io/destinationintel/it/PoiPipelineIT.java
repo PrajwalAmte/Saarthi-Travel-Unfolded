@@ -184,6 +184,28 @@ class PoiPipelineIT extends IntegrationTest {
     }
 
     @Test
+    void anOvertureListingUnderABookingSiteJoinsThePlaceOvertureAlreadyHas() {
+        RawPoi hotel = overture("ov-magadh", "Hotel Magadh Regency", "hotel", "stay", 12.3100, 76.6600);
+        RawPoi cafe = overture("ov-cafe", "Fixture Regency Cafe", "cafe", "drink", 12.3102, 76.6601);
+        importRelease(OVERTURE, List.of(hotel, cafe), PoiPipeline.Scope.fullRelease());
+        importRelease(OVERTURE, List.of(hotel, cafe,
+                overture("ov-oyo", "OYO 47006 Hotel Magadh Regency", "resort", "stay", 12.3101, 76.6600),
+                overture("ov-far", "OYO 47007 Hotel Magadh Regency", "resort", "stay", 12.3200, 76.6600),
+                overture("ov-other", "Hotel Magadh Grand", "hotel", "stay", 12.3101, 76.6601)), PoiPipeline.Scope.fullRelease());
+
+        UUID place = jdbc.sql("SELECT poi_id FROM poi_source_record WHERE external_id = 'ov-magadh'").query(UUID.class).single();
+        assertThat(jdbc.sql("SELECT poi_id FROM poi_source_record WHERE external_id = 'ov-oyo'").query(UUID.class).single())
+                .as("compared with its own source once the prefix is ignored").isEqualTo(place);
+        assertThat(jdbc.sql("SELECT poi_id FROM poi_source_record WHERE external_id = 'ov-far'").query(UUID.class).single())
+                .as("a kilometre away").isNotEqualTo(place);
+        assertThat(jdbc.sql("SELECT poi_id FROM poi_source_record WHERE external_id = 'ov-other'").query(UUID.class).single())
+                .as("a different hotel next door").isNotEqualTo(place);
+        assertThat(jdbc.sql("SELECT idi_match_name('Super Capital O 123 Hotel Hills')").query(String.class).single()).isEqualTo("hotel hills");
+        assertThat(jdbc.sql("SELECT idi_match_name('FabHotel Prime Tulips Resort')").query(String.class).single()).isEqualTo("tulips resort");
+        assertThat(jdbc.sql("SELECT idi_match_name('Capital Hotel')").query(String.class).single()).as("not a booking site").isEqualTo("capital hotel");
+    }
+
+    @Test
     void uncertainMatchesAreDecidedFromEvidenceAndRecordTheirRule() throws Exception {
         importRelease(OSM, OSM_RELEASE, PoiPipeline.Scope.fullRelease());
         UUID palace = jdbc.sql("SELECT poi_id FROM poi_source_record WHERE external_id = 'node/2'").query(UUID.class).single();

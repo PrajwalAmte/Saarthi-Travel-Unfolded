@@ -40,6 +40,45 @@ class MatchEvidenceTest {
         assertThat(platform.outcome()).as("a shared social platform is not evidence").isEqualTo(Outcome.DISTINCT);
     }
 
+    private static Side site(String name, String website, String phone) {
+        return new Side(name, "stay", Set.of(phone), Set.of(website), false);
+    }
+
+    @Test
+    void aSharedWebsiteNeedsTheNamesToAgree() {
+        var neighbours = MatchEvidence.decide(site("Hotel USA", "http://www.hotelusadelhi.com/", "+911123551455"),
+                site("Hotel UK", "http://hotelusadelhi.com/", "+911123683777"), 16);
+        assertThat(neighbours.outcome()).as("one owner's two hotels").isEqualTo(Outcome.DISTINCT);
+        var group = MatchEvidence.decide(site("Hotel Suraj Grand", "http://www.surajhotels.com/", "+918514241999"),
+                site("Suraj Hotel", "http://www.surajhotels.com/", "+918514222456"), 396);
+        assertThat(group.outcome()).as("a shared word far apart").isEqualTo(Outcome.DISTINCT);
+        assertThat(MatchEvidence.decide(new Side("Mandawa", "stay", Set.of(), Set.of("http://www.mandawakothi.com/"), false),
+                new Side("Mandawa Kothi", "stay", Set.of(), Set.of("http://www.mandawakothi.com/"), false), 356).outcome()).isEqualTo(Outcome.DISTINCT);
+
+        assertThat(MatchEvidence.decide(new Side("The Grand Radiant", "stay", Set.of(), Set.of("https://grandradiant.example/"), false),
+                new Side("The Grand Radiant", "stay", Set.of(), Set.of("grandradiant.example"), false), 333).rule())
+                .as("one name, even with far-apart pins").isEqualTo("shared_website");
+        assertThat(MatchEvidence.decide(new Side("Royal Fort Hotel", "stay", Set.of(), Set.of("https://royalfort.example/"), false),
+                new Side("Royal Fort", "stay", Set.of(), Set.of("royalfort.example"), false), 20).rule()).isEqualTo("shared_website");
+        assertThat(MatchEvidence.decide(new Side("Vasco Home Stay", "stay", Set.of(), Set.of("https://vasco.example/"), false),
+                new Side("Vasco Homestay", "stay", Set.of(), Set.of("vasco.example"), false), 120).rule())
+                .as("a shared word nearby").isEqualTo("shared_website");
+    }
+
+    @Test
+    void differentPhonesDoNotSplitAPlaceWhoseNameAgrees() {
+        var hotel = MatchEvidence.decide(side("Hotel Beach Crown", "stay", "07208883456"), side("Hotel Beach Crown", "stay", "+919136108454"), 396);
+        assertThat(hotel.rule()).as("hotels keep one name").isEqualTo("same_name_nearby");
+        var spelled = MatchEvidence.decide(side("Cafe Niloufer", "drink", "+917674834471"), side("Nilofer Cafe", "drink", "+919000580109"), 127);
+        assertThat(spelled.outcome()).isEqualTo(Outcome.SAME);
+        var outlets = MatchEvidence.decide(side("Town Bakery", "eat", "+919876500001"), side("Town Bakery", "eat", "+919876500002"), 223);
+        assertThat(outlets.rule()).as("a shop's same-named outlets stay apart").isEqualTo("different_phones");
+        assertThat(MatchEvidence.decide(side("Town Bakery", "eat", "+919876500001"), side("Town Bakery", "eat", "+919876500002"), 120).outcome())
+                .isEqualTo(Outcome.SAME);
+        var named = MatchEvidence.decide(side("Hotel Anand Palace", "stay", "+913542253335"), side("Hotel Dip Palace", "stay", "+913542258456"), 174);
+        assertThat(named.rule()).isEqualTo("different_phones");
+    }
+
     @Test
     void spellingAndSpacingVariantsNearbyAreTheSamePlace() {
         assertThat(MatchEvidence.decide(side("AnnaMaya", "eat"), side("Anna Maya", "eat"), 61).rule()).isEqualTo("same_name_same_spot");
@@ -74,6 +113,44 @@ class MatchEvidenceTest {
                 .isEqualTo(Outcome.SAME);
         assertThat(MatchEvidence.decide(side("Light House Beach Resort", "stay"), side("Lighthouse Beach", "see"), 90).outcome())
                 .as("a resort is not the beach").isEqualTo(Outcome.DISTINCT);
+        assertThat(MatchEvidence.decide(side("Hotel Radha Krushna", "stay"), side("Radha Krushna", "eat"), 161).rule())
+                .as("one name a little further apart").isEqualTo("same_name_nearby");
+        assertThat(MatchEvidence.decide(side("Hotel Radha Krushna", "stay"), side("Radha Krushna", "eat"), 250).rule()).isEqualTo("different_kind_of_place");
+        assertThat(MatchEvidence.decide(side("Hotel Shiv", "stay"), side("Hotel Shivam", "eat"), 161).rule())
+                .as("only an identical name stretches the distance").isEqualTo("different_kind_of_place");
+    }
+
+    @Test
+    void aPalaceHotelIsOnePlaceButAHotelNamedAfterAWaterfallIsNot() {
+        assertThat(MatchEvidence.decide(side("Noor-Us-Sabah Palace", "see"), side("Noor-us-Sabah Palace", "stay"), 24).outcome()).isEqualTo(Outcome.SAME);
+        assertThat(MatchEvidence.decide(side("Noor-Us-Sabah Palace", "see"), side("Noor-us-Sabah Palace", "stay"), 120).rule()).isEqualTo("different_kind_of_place");
+        assertThat(MatchEvidence.decide(side("Banjhakri Falls", "stay"), side("Banjhakri Falls", "see"), 43).rule()).isEqualTo("different_kind_of_place");
+    }
+
+    private static Side chainHotel(String name) {
+        return new Side(name, "stay", Set.of(), Set.of(), true);
+    }
+
+    @Test
+    void aChainHotelWithAMatchingNameIsOnePlaceButAChainOutletIsNot() {
+        assertThat(MatchEvidence.decide(chainHotel("Radisson Hotel Kandla"), side("Radisson Hotel Kandla", "stay"), 277).rule()).isEqualTo("same_name_nearby");
+        assertThat(MatchEvidence.decide(chainHotel("JW Marriott Bengaluru Prestige"), side("JW Marriott Bengakuru Prestige", "stay"), 314).outcome())
+                .as("a one-letter typo").isEqualTo(Outcome.SAME);
+        assertThat(MatchEvidence.decide(chainHotel("Radisson Blu Kandla"), side("Radisson Kandla Airport", "stay"), 277).rule()).isEqualTo("chain_branch");
+        assertThat(MatchEvidence.decide(chainHotel("Radisson Hotel Kandla"), side("Radisson Hotel Kandla", "stay"), 500).rule()).isEqualTo("chain_branch");
+        assertThat(MatchEvidence.decide(new Side("Costa Coffee", "drink", Set.of(), Set.of(), true), side("Costa Coffee", "drink"), 375).rule())
+                .as("same-named outlets can really be separate").isEqualTo("chain_branch");
+    }
+
+    @Test
+    void theShadowRuleSeesMoreMatchesWithoutChangingAnyDecision() {
+        assertThat(MatchEvidence.shadowNameMatch("Dainthlen Waterfalls", "Dainthlen falls", 107)).isTrue();
+        assertThat(MatchEvidence.shadowNameMatch("Heritage Village Resort & Spa Goa", "Resort Heritage Village Club Goa", 27)).isTrue();
+        assertThat(MatchEvidence.shadowNameMatch("Heritage Village Resort & Spa Goa", "Resort Heritage Village Club Goa", 120)).as("too far for shared words alone").isFalse();
+        assertThat(MatchEvidence.shadowNameMatch("Malwa Retreat", "Mandu Retreat", 32)).isFalse();
+        assertThat(MatchEvidence.shadowNameMatch("XL Restaurant", "Sakura restaurant", 59)).isFalse();
+        assertThat(MatchEvidence.decide(side("Heritage Village Resort & Spa Goa", "stay"), side("Resort Heritage Village Club Goa", "stay"), 27).rule())
+                .as("the real decision is not affected").isEqualTo("names_differ");
     }
 
     @Test

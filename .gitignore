@@ -19,6 +19,13 @@ frontend/blob-report/
 frontend/next-env.d.ts
 *.tsbuildinfo
 
+# Place-matching model: build output, and data holding business contact details
+ml/matching/target/
+ml/matching/train/target/
+ml/matching/data/
+# Calibrate run logs and screenshots, kept locally; they belong to that project
+ml/matching/evidence/
+
 # Editors and OS
 .idea/
 .vscode/

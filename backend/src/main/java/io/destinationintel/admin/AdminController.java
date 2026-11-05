@@ -49,7 +49,7 @@ public class AdminController {
                           String lastError, Map<String, Object> stats, String createdBy, OffsetDateTime createdAt) {}
 
     public record EnqueueBody(
-            @NotBlank @Pattern(regexp = "wikidata_index|wikivoyage_guide|climate|place_image|coverage_refresh|osm_extract|overture_places|heritage_monuments|quality_evaluation|match_resolution|road_routes|nearest_transport|air_quality|fact_check|wikivoyage_redirects") String type,
+            @NotBlank @Pattern(regexp = "wikidata_index|wikivoyage_guide|climate|place_image|coverage_refresh|osm_extract|overture_places|heritage_monuments|quality_evaluation|match_resolution|road_routes|nearest_transport|air_quality|fact_check|wikivoyage_redirects|poi_duplicate_merge") String type,
             @Pattern(regexp = "^[a-z0-9-]{1,40}$") String sourceId,
             @Size(max = 140) String placeSlug,
             boolean force) {}

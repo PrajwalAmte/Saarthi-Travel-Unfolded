@@ -26,6 +26,13 @@ export function isWaiting(j: Pick<JobView, "status" | "lastError">): boolean {
 }
 
 type UserRow = { id: string; displayName: string; email: string | null; tier: string; admin: boolean; status: string; createdAt: string };
+type MergeList = {
+  total: number;
+  items: { id: string; keptName: string; mergedName: string; rule: string; distanceM: number; undoneAt: string | null }[];
+  shadowTotal: number;
+  shadowSample: { recordName: string; candidateName: string; distanceM: number }[];
+};
+
 type MatchItem = {
   id: string;
   score: number;
@@ -50,6 +57,7 @@ export function AdminConsole() {
   const [users, setUsers] = React.useState<UserRow[]>([]);
   const [requests, setRequests] = React.useState<RequestRow[]>([]);
   const [matches, setMatches] = React.useState<{ total: number; items: MatchItem[] } | null>(null);
+  const [merges, setMerges] = React.useState<MergeList | null>(null);
 
   const [version, setVersion] = React.useState(0);
   const isAdmin = Boolean(session?.user?.admin);
@@ -62,13 +70,15 @@ export function AdminConsole() {
       api<IngestionStatus>("/api/status/ingestion"),
       api<RequestRow[]>("/api/admin/requests"),
       api<{ total: number; items: MatchItem[] }>("/api/admin/poi-matches?limit=20"),
+      api<MergeList>("/api/admin/poi-merges?limit=20"),
     ])
-      .then(([j, s, r, m]) => {
+      .then(([j, s, r, m, g]) => {
         if (cancelled) return;
         setJobs(j);
         setStatus(s);
         setRequests(r);
         setMatches(m);
+        setMerges(g);
       })
       .catch((e) => {
         if (!cancelled) setMessage({ tone: "error", text: problemMessage(e) });
@@ -332,6 +342,51 @@ export function AdminConsole() {
         ) : (
           <p className="text-sm text-muted">Nothing to review.</p>
         )}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-2xl font-semibold">Merged map places</h2>
+        <p className="text-sm text-ink-2">
+          Places merged automatically because the evidence says they are one.
+          {merges ? ` ${merges.total.toLocaleString("en-IN")} in effect.` : ""} Undoing one restores both places, and the pair is not merged again.
+        </p>
+        {merges && merges.items.length ? (
+          <ul className="divide-y divide-line rounded-lg border border-line bg-surface">
+            {merges.items.map((m) => (
+              <li key={m.id} className="flex flex-wrap items-center justify-between gap-3 p-3 text-sm">
+                <p className="min-w-0">
+                  <span className="font-medium">{m.mergedName}</span> into <span className="font-medium">{m.keptName}</span>{" "}
+                  <span className="text-muted">
+                    ({m.rule.replaceAll("_", " ")}, {Math.round(m.distanceM)} m apart)
+                  </span>
+                </p>
+                {m.undoneAt ? (
+                  <span className="text-muted">Undone</span>
+                ) : (
+                  <Button size="sm" variant="outline" onClick={() => void act(() => api(`/api/admin/poi-merges/${m.id}/undo`, { method: "POST" }), "Merge undone.")}>
+                    Undo
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted">No merges yet.</p>
+        )}
+        {merges && merges.shadowTotal > 0 ? (
+          <details className="text-sm">
+            <summary className="cursor-pointer">
+              Name rule on trial: would match {merges.shadowTotal.toLocaleString("en-IN")} pairs now kept apart
+            </summary>
+            <ul className="mt-2 space-y-1 text-ink-2">
+              {merges.shadowSample.map((s, i) => (
+                <li key={i}>
+                  {s.recordName} / {s.candidateName} <span className="text-muted">({Math.round(s.distanceM)} m)</span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
       </section>
 
       <section className="space-y-3">

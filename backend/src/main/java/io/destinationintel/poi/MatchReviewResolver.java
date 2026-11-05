@@ -38,10 +38,12 @@ public class MatchReviewResolver {
 
     private final JdbcClient jdbc;
     private final Json json;
+    private final PoiMerger merger;
 
-    public MatchReviewResolver(JdbcClient jdbc, Json json) {
+    public MatchReviewResolver(JdbcClient jdbc, Json json, PoiMerger merger) {
         this.jdbc = jdbc;
         this.json = json;
+        this.merger = merger;
     }
 
     /** Resolves every open review, or those of one source's records when {@code sourceId} is given. */
@@ -68,15 +70,22 @@ public class MatchReviewResolver {
         int merged = 0;
         int distinct = 0;
         List<UUID> becomeNew = new ArrayList<>();
+        // Places a record matched alongside the one it joined may be one place listed twice.
+        List<List<UUID>> possibleDuplicates = new ArrayList<>();
         for (Map.Entry<UUID, List<Pair>> e : byRecord.entrySet()) {
             Pair best = null;
             Decision bestDecision = null;
             Map<UUID, Decision> decisions = new LinkedHashMap<>();
+            Set<UUID> shadow = new HashSet<>();
             for (Pair p : e.getValue()) {
                 Side record = side(p.recordName(), p.recordGroup(), List.of(json.map(p.recordAttrs())));
-                Side candidate = side(p.candidateName(), p.candidateGroup(), candidateAttrs(p.candidateAttrs()));
+                Side candidate = side(p.candidateName(), p.candidateGroup(), attributeSets(json, p.candidateAttrs()));
                 Decision d = MatchEvidence.decide(record, candidate, p.distanceM());
                 decisions.put(p.reviewId(), d);
+                if (d.rule().equals("names_differ") && MatchEvidence.shadowNameMatch(p.recordName(), p.candidateName(), p.distanceM())) {
+                    shadow.add(p.reviewId());
+                    byRule.merge("shadow:" + MatchEvidence.SHADOW_RULE, 1, Integer::sum);
+                }
                 if (d.outcome() == Outcome.SAME && (best == null || stronger(d, p, bestDecision, best))) {
                     best = p;
                     bestDecision = d;
@@ -88,9 +97,14 @@ public class MatchReviewResolver {
                 String status = chosen ? "merged" : "distinct";
                 String resolution = chosen || d.outcome() == Outcome.DISTINCT ? d.rule() : "another_candidate_matched_better";
                 jdbc.sql("""
-                                UPDATE poi_match_review SET status = :st, resolution = :res, resolved_at = now()
+                                UPDATE poi_match_review SET status = :st, resolution = :res, resolved_at = now(),
+                                       shadow_rule = CAST(:shadow AS text)
                                 WHERE id = :id AND status = 'open'
-                                """).param("st", status).param("res", resolution).param("id", p.reviewId()).update();
+                                """).param("st", status).param("res", resolution)
+                        .param("shadow", shadow.contains(p.reviewId()) ? MatchEvidence.SHADOW_RULE : null).param("id", p.reviewId()).update();
+                if (!chosen && d.outcome() == Outcome.SAME) {
+                    possibleDuplicates.add(List.of(best.candidateId(), p.candidateId()));
+                }
                 byRule.merge((chosen ? "same:" : "distinct:") + resolution, 1, Integer::sum);
             }
             if (best != null) {
@@ -106,6 +120,13 @@ public class MatchReviewResolver {
             }
         }
         int created = createPlaces(becomeNew);
+        int duplicatesMerged = 0;
+        for (List<UUID> places : possibleDuplicates) {
+            duplicatesMerged += merger.mergeIfSame(places.get(0), places.get(1)) ? 1 : 0;
+        }
+        if (duplicatesMerged > 0) {
+            byRule.put("places_merged", duplicatesMerged);
+        }
         return new Counts(byRecord.size(), merged, distinct, created, byRule);
     }
 
@@ -199,7 +220,7 @@ public class MatchReviewResolver {
         return created;
     }
 
-    private List<Map<String, Object>> candidateAttrs(String jsonArray) {
+    static List<Map<String, Object>> attributeSets(Json json, String jsonArray) {
         List<Map<String, Object>> out = new ArrayList<>();
         if (jsonArray == null) {
             return out;
@@ -214,7 +235,7 @@ public class MatchReviewResolver {
         return out;
     }
 
-    private static Side side(String name, String group, List<Map<String, Object>> attributeSets) {
+    static Side side(String name, String group, List<Map<String, Object>> attributeSets) {
         Set<String> phones = new HashSet<>();
         Set<String> websites = new HashSet<>();
         Set<String> brands = new HashSet<>();

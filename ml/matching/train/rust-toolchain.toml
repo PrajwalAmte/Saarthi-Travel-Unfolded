@@ -1,0 +1,3 @@
+# Burn 0.22 needs Rust 1.95 or newer.
+[toolchain]
+channel = "1.99.0"

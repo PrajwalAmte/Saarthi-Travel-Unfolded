@@ -175,18 +175,26 @@ public class PoiStore {
                         WHERE r.id = m.rid
                         """).param("run", runId).update();
 
-        // 3. Weak cross-source candidates go to review; the record stays unlinked.
+        // 3. Weak candidates go to review; the record stays unlinked. Names are also compared without a
+        // booking site's prefix. Overture lists one hotel under several names, so its records are compared
+        // with each other too, but only on closely matching names nearby.
         int possible = jdbc.sql("""
                         WITH cands AS (
-                            SELECT r2.id AS rid, p.id AS pid, similarity(p.name_normalized, idi_normalize(r2.name)) AS sim,
+                            SELECT r2.id AS rid, p.id AS pid,
+                                   greatest(similarity(p.name_normalized, idi_normalize(r2.name)),
+                                            similarity(idi_match_name(p.name), idi_match_name(r2.name))) AS sim,
                                    ST_Distance(p.geog, r2.geog) AS dist
                             FROM poi_source_record r2
                             JOIN poi p ON p.status = 'active' AND ST_DWithin(p.geog, r2.geog, 400)
-                                     AND p.primary_source_id <> r2.source_id
                             WHERE r2.last_run_id = :run AND r2.poi_id IS NULL AND r2.deleted_at IS NULL
                                 AND r2.match_confidence IS DISTINCT FROM 'unplaceable'
                               AND r2.match_confidence IS DISTINCT FROM 'possible'
-                              AND similarity(p.name_normalized, idi_normalize(r2.name)) >= 0.55
+                              AND ((p.primary_source_id <> r2.source_id
+                                    AND greatest(similarity(p.name_normalized, idi_normalize(r2.name)),
+                                                 similarity(idi_match_name(p.name), idi_match_name(r2.name))) >= 0.55)
+                                OR (r2.source_id = 'overture-places' AND p.primary_source_id = r2.source_id
+                                    AND ST_DWithin(p.geog, r2.geog, 150) AND length(idi_match_name(r2.name)) >= 6
+                                    AND similarity(idi_match_name(p.name), idi_match_name(r2.name)) >= 0.75))
                               AND NOT EXISTS (SELECT 1 FROM poi_match_review d WHERE d.record_id = r2.id
                                               AND d.candidate_poi_id = p.id AND d.status = 'distinct')),
                         inserted AS (

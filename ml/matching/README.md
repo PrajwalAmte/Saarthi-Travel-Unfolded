@@ -158,14 +158,27 @@ A second sheet of 320 pairs is a test nobody has tuned against:
 
 ```bash
 cargo run --release -- fresh                 # read-only; writes data/fresh/gold_sheet.csv and gold_key.csv
-cargo run --release -- build --hold-out data/fresh --out train_pairs_v3.csv
-cd train && cargo run --release -- train --name v3 --train train_pairs_v3.csv
+cargo run --release -- build                 # keeps data/fresh out of training when it exists
+cd train && cargo run --release -- train --name v2 --train train_pairs_v2.csv
 ```
 
 Its pairs share no record, mapped place or name with the first sheet, are all test pairs, and have ids `F001`
-onwards. `build --hold-out` keeps them, and anything sharing a record, place or name with them, out of training, so
-retrain after exporting; a model trained before then has seen some of them. Label the sheet as before, without AI
-help, and do not change rules or models using these answers.
+onwards. Retrain after exporting it, because a model trained earlier has seen some of its pairs. Label the sheet as
+before, without AI help, and do not change rules or models using these answers.
+
+## What is in `data/`
+
+All of it is git-ignored. Keep the first two rows safe: nothing else can recreate them.
+
+| Files | What they are | Can be rebuilt? |
+| --- | --- | --- |
+| `gold_sheet.csv`, `gold_key.csv`, `fresh/gold_sheet.csv`, `fresh/gold_key.csv` | The checked pairs and their answers | No |
+| `model/` | MiniLM, the pretrained starting point | Yes, from Hugging Face |
+| `models/v2/` | The trained model that is published | By training again |
+| `train_pairs_v2.csv`, `neural_scores_v2.csv`, `fresh/neural_scores_v2.csv`, `gold_evidence.csv`, `fresh/gold_evidence.csv` | Training pairs, and scores and evidence for the checked pairs | `build`, `train`, `predict` |
+| `pairs_full.csv`, `pairs_decided.csv` | Every pair from the database, and what the rules decide | `pairs`, `redecide/run.sh` |
+| `train_pairs.csv` | The first model's training pairs, which `baseline` reads | No; the database has changed |
+| `recheck_sheet.csv`, `recheck_key.csv` | The optional blind re-check, not yet filled in | `recheck` |
 
 ## Publish a model
 
@@ -173,7 +186,7 @@ help, and do not change rules or models using these answers.
 `data/release/` and uploads nothing:
 
 ```bash
-./publish.sh matcher matcher-v0.1.0
+./publish.sh v2 matcher-v0.2.0
 ```
 
 Add `--upload` to send them to Hugging Face. The token is read from `HF_TOKEN` in the repository's `.env`.

@@ -27,7 +27,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     match args.first().map(String::as_str) {
         Some("export") => export(&args, &data),
         Some("pairs") => pairs(&args, &data),
-        Some("build") => build::run(&data, option(&args, "--hold-out").as_deref(), &option(&args, "--out").map_or("train_pairs_v2.csv".to_string(), |p| p.to_string_lossy().into_owned())),
+        Some("build") => {
+            // A second sheet, once exported, is always kept out of training so it stays a clean test.
+            let second = option(&args, "--hold-out").or_else(|| Some(data.join("fresh")).filter(|d| d.join("gold_key.csv").exists()));
+            build::run(&data, second.as_deref(), &option(&args, "--out").map_or("train_pairs_v2.csv".to_string(), |p| p.to_string_lossy().into_owned()))
+        }
         Some("fresh") => fresh::run(&args, &data),
         Some("score") => score::run(&data, &labels::read_gold(&data)?),
         Some("baseline") => baseline::run(&data, &labels::read_gold(&data)?, option(&args, "--scores").as_deref()),

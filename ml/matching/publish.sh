@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds the release files for a saved model in data/release/. Uploads only when given --upload.
-# Usage: ./publish.sh <model name> <tag> [--upload]     e.g. ./publish.sh matcher matcher-v0.1.0
+# Usage: ./publish.sh <model name> <tag> [--upload]     e.g. ./publish.sh v2 matcher-v0.2.0
 set -euo pipefail
 
 REPO=PrajwalAmte/saarthi-place-matcher
@@ -20,6 +20,14 @@ rm -rf "${release:?}/$bundle" "$release/$bundle.tar.gz" "$release/SHA256SUMS"
 mkdir -p "$release/$bundle"
 cp "$model/model.safetensors" "$model/tokenizer.json" "$model/manifest.json" "$root/LICENSE" "$release/$bundle/"
 cp "$here/MODEL_CARD.md" "$release/$bundle/README.md"
+# The published model is named by its release, not by the folder it was trained into.
+python3 -I - "$release/$bundle/manifest.json" "$tag" <<'PY'
+import json, sys
+path, name = sys.argv[1], sys.argv[2]
+manifest = json.load(open(path))
+manifest["name"] = name
+json.dump(manifest, open(path, "w"), indent=2, sort_keys=True)
+PY
 
 cd "$release"
 COPYFILE_DISABLE=1 tar -czf "$bundle.tar.gz" "$bundle"

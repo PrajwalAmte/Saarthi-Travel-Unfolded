@@ -19,6 +19,10 @@ pub struct Pair {
     pub address_a: String,
     pub phone_a: String,
     pub website_a: String,
+    pub brand_a: String,
+    pub group_a: String,
+    pub group_b: String,
+    pub brands_b: String,
     pub lat_a: f64,
     pub lon_a: f64,
     pub name_b: String,
@@ -133,7 +137,7 @@ pub fn select_gold(pairs: &[Pair], quotas: &[(&str, usize)], seed: u64) -> Vec<C
 }
 
 /// What ties two pairs together: sharing any of these would let a model recognise a test pair.
-fn group_keys(pair: &Pair) -> Vec<String> {
+pub fn group_keys(pair: &Pair) -> Vec<String> {
     let mut keys = vec![format!("record:{}", pair.record_id), format!("poi:{}", pair.poi_id)];
     for name in [&pair.name_a_normalized, &pair.name_b_normalized] {
         if !name.is_empty() {

@@ -18,7 +18,9 @@ const COLUMNS: &str = r#"
     coalesce(r.attributes ->> 'website', '') AS website_a, r.latitude AS lat_a, r.longitude AS lon_a,
     p.name AS name_b, coalesce(p.name_normalized, '') AS name_b_normalized, p.category AS category_b,
     other.sources AS sources_b, other.addresses AS address_b, other.phones AS phones_b, other.websites AS websites_b,
-    p.latitude AS lat_b, p.longitude AS lon_b, ST_Distance(r.geog, p.geog) AS distance_m
+    p.latitude AS lat_b, p.longitude AS lon_b, ST_Distance(r.geog, p.geog) AS distance_m,
+    coalesce(r.attributes ->> 'brand', '') AS brand_a, coalesce(r.category_group, '') AS group_a,
+    coalesce(p.category_group, '') AS group_b, other.brands AS brands_b
 "#;
 
 const OTHER_RECORDS: &str = r#"
@@ -26,7 +28,8 @@ const OTHER_RECORDS: &str = r#"
         SELECT string_agg(DISTINCT o.source_id, ' | ') AS sources,
                coalesce(string_agg(DISTINCT o.attributes ->> 'address', ' | '), '') AS addresses,
                coalesce(string_agg(DISTINCT o.attributes ->> 'phone', ' | '), '') AS phones,
-               coalesce(string_agg(DISTINCT o.attributes ->> 'website', ' | '), '') AS websites
+               coalesce(string_agg(DISTINCT o.attributes ->> 'website', ' | '), '') AS websites,
+               coalesce(string_agg(DISTINCT o.attributes ->> 'brand', ' | '), '') AS brands
         FROM poi_source_record o WHERE o.poi_id = p.id AND o.id <> r.id AND o.deleted_at IS NULL) other
 "#;
 
@@ -43,6 +46,10 @@ fn pair_from(row: &Row, rule: String, rule_label: String) -> Pair {
         address_a: row.get("address_a"),
         phone_a: row.get("phone_a"),
         website_a: row.get("website_a"),
+        brand_a: row.get("brand_a"),
+        group_a: row.get("group_a"),
+        group_b: row.get("group_b"),
+        brands_b: row.get("brands_b"),
         lat_a: row.get("lat_a"),
         lon_a: row.get("lon_a"),
         name_b: row.get("name_b"),
@@ -90,7 +97,8 @@ pub fn connect(env_file: &Path) -> Result<Client, Box<dyn Error>> {
     config.host(&host).port(port).dbname(&database).user(get("DATABASE_USERNAME")?).password(get("DATABASE_PASSWORD")?).ssl_mode(SslMode::Require);
     let tls = MakeTlsConnector::new(TlsConnector::new()?);
     let mut client = config.connect(tls)?;
-    client.batch_execute("SET default_transaction_read_only = on")?;
+    // Read-only, and a runaway query is stopped rather than left to load a small database.
+    client.batch_execute("SET default_transaction_read_only = on; SET statement_timeout = '180s'")?;
     Ok(client)
 }
 

@@ -1,7 +1,7 @@
 //! Writes the three files. The sheet hides what the rules decided, so they cannot sway the person
 //! checking; the training file holds only what the model may see.
 
-use crate::sampling::{population, shuffle_position, training_indexes, Chosen, Pair};
+use crate::sampling::{shuffle_position, training_indexes, Chosen, Pair};
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::path::Path;
@@ -58,9 +58,9 @@ fn sheet_order(pairs: &[Pair], chosen: &[Chosen], seed: u64) -> Vec<Chosen> {
     order
 }
 
-pub fn write_gold(dir: &Path, pairs: &[Pair], chosen: &[Chosen], seed: u64, never_compared_population: usize) -> Result<(), Box<dyn Error>> {
-    let mut populations = population(pairs);
-    populations.insert("never_compared".to_string(), never_compared_population);
+/// `populations` says how many pairs each rule (or sampling group) stands for, so answers can be weighted back.
+/// Ids are `id_prefix` and a number; a second sheet uses another prefix so the two can never be confused.
+pub fn write_gold(dir: &Path, pairs: &[Pair], chosen: &[Chosen], seed: u64, populations: &BTreeMap<String, usize>, id_prefix: &str) -> Result<(), Box<dyn Error>> {
 
     let mut sheet = csv::Writer::from_path(dir.join("gold_sheet.csv"))?;
     let mut key = csv::Writer::from_path(dir.join("gold_key.csv"))?;
@@ -71,7 +71,7 @@ pub fn write_gold(dir: &Path, pairs: &[Pair], chosen: &[Chosen], seed: u64, neve
     ])?;
     for (position, c) in sheet_order(pairs, chosen, seed).iter().enumerate() {
         let p = &pairs[c.index];
-        let id = format!("P{:03}", position + 1);
+        let id = format!("{id_prefix}{:03}", position + 1);
         let distance = metres(p.distance_m);
         sheet.write_record([
             id.as_str(), "", "", &p.name_a, &p.category_a, &p.source_a, &p.address_a, &p.phone_a, &clean_websites(&p.website_a),
@@ -86,6 +86,28 @@ pub fn write_gold(dir: &Path, pairs: &[Pair], chosen: &[Chosen], seed: u64, neve
     }
     sheet.flush()?;
     key.flush()?;
+    Ok(())
+}
+
+pub const FULL_HEADER: &[&str] = &[
+    "record_id", "poi_id", "rule", "rule_label", "name_a", "name_a_normalized", "category_a", "group_a", "source_a", "phone_a",
+    "website_a", "brand_a", "name_b", "name_b_normalized", "category_b", "group_b", "phones_b", "websites_b", "brands_b",
+    "distance_m",
+];
+
+/// Every pair with the contact details and brands the rules look at, for re-deciding them with the current
+/// rules. It holds contact details, so it stays in `data/` and never reaches training.
+pub fn write_full(dir: &Path, pairs: &[Pair]) -> Result<(), Box<dyn Error>> {
+    let mut out = csv::Writer::from_path(dir.join("pairs_full.csv"))?;
+    out.write_record(FULL_HEADER)?;
+    for p in pairs {
+        out.write_record([
+            p.record_id.as_str(), &p.poi_id, &p.rule, &p.rule_label, &p.name_a, &p.name_a_normalized, &p.category_a, &p.group_a,
+            &p.source_a, &p.phone_a, &p.website_a, &p.brand_a, &p.name_b, &p.name_b_normalized, &p.category_b, &p.group_b,
+            &p.phones_b, &p.websites_b, &p.brands_b, &p.distance_m.to_string(),
+        ])?;
+    }
+    out.flush()?;
     Ok(())
 }
 
@@ -148,7 +170,7 @@ mod tests {
     fn the_sheet_never_shows_what_the_rules_decided() {
         let dir = temp_dir("sheet");
         let pairs = vec![sample()];
-        write_gold(&dir, &pairs, &[Chosen { index: 0, split: Split::Test }], 7, 0).unwrap();
+        write_gold(&dir, &pairs, &[Chosen { index: 0, split: Split::Test }], 7, &BTreeMap::new(), "P").unwrap();
         let sheet = std::fs::read_to_string(dir.join("gold_sheet.csv")).unwrap();
         assert!(!sheet.contains("shared_phone") && !sheet.contains(",same,") && !sheet.contains("test"));
         assert!(sheet.contains("P001"));

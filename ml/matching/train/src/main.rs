@@ -30,6 +30,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         Some("verify") => verify(&data),
         Some("train") => train(
             &data,
+            option(&args, "--train").unwrap_or("train_pairs.csv"),
             option(&args, "--name").unwrap_or("hard"),
             option(&args, "--steps").map_or(Ok(400), str::parse)?,
             args.iter().any(|a| a == "--soft"),
@@ -85,6 +86,7 @@ fn verify(data: &std::path::Path) -> Result<(), Box<dyn Error>> {
         id: String::new(),
         rule: String::new(),
         says_same: false,
+        weight: 1.0,
         tokens: encoded.get_ids().to_vec(),
         segments: encoded.get_type_ids().to_vec(),
         extra: [0.0; 2],
@@ -110,7 +112,7 @@ fn seconds_since(start: Instant) -> f64 {
     start.elapsed().as_secs_f64()
 }
 
-fn train(data: &std::path::Path, name: &str, steps: usize, soft: bool, pad_to: usize) -> Result<(), Box<dyn Error>> {
+fn train(data: &std::path::Path, train_file: &str, name: &str, steps: usize, soft: bool, pad_to: usize) -> Result<(), Box<dyn Error>> {
     let plain = device();
     let device = plain.clone().autodiff();
     device.seed(SEED);
@@ -119,7 +121,7 @@ fn train(data: &std::path::Path, name: &str, steps: usize, soft: bool, pad_to: u
     let mut model = Model::load(&Weights(safetensors::SafeTensors::deserialize(&bytes)?), &device);
     drop(bytes);
     let tokenizer = load_tokenizer(&data.join("model/tokenizer.json"))?;
-    let examples = load_examples(&data.join("train_pairs.csv"), None, &tokenizer)?;
+    let examples = load_examples(&data.join(train_file), None, &tokenizer)?;
     let gold = load_examples(&data.join("gold_key.csv"), Some("pair_id"), &tokenizer)?;
 
     let trust = if soft { soft_targets(data)? } else { Default::default() };
@@ -143,14 +145,18 @@ fn train(data: &std::path::Path, name: &str, steps: usize, soft: bool, pad_to: u
     for step in 0..steps {
         let chosen: Vec<&Example> = balanced_batch(&same, &different, BATCH, &mut random).into_iter().map(|i| &examples[i]).collect();
         let targets: Vec<f32> = chosen.iter().map(|e| target(e)).collect();
+        let weights: Vec<f32> = chosen.iter().map(|e| e.weight).collect();
+        let weight_total: f32 = weights.iter().sum::<f32>().max(1e-6);
         let batch = to_batch(&chosen, pad_to, &device);
         let length = batch.tokens.dims()[1];
         let y: Tensor<1> = Tensor::from_data(TensorData::new(targets, [BATCH]), &device);
+        let w: Tensor<1> = Tensor::from_data(TensorData::new(weights, [BATCH]), &device);
         let data_seconds = seconds_since(step_start);
 
         let compute_start = Instant::now();
         let logits = model.forward(batch);
-        let loss = -(y.clone() * log_sigmoid(logits.clone()) + (-y + 1.0) * log_sigmoid(-logits)).mean();
+        // Each pair counts as much as its rule agreed with the person; all weights 1 gives the plain mean.
+        let loss = -((y.clone() * log_sigmoid(logits.clone()) + (-y + 1.0) * log_sigmoid(-logits)) * w).sum() / weight_total;
         let grads = GradientsParams::from_grads(loss.backward(), &model);
         device.sync()?;
         let compute_seconds = seconds_since(compute_start);
@@ -196,7 +202,7 @@ fn train(data: &std::path::Path, name: &str, steps: usize, soft: bool, pad_to: u
     out.flush()?;
     println!("Scores for the checked pairs are in {}.", path.display());
     let saved = data.join("models").join(name);
-    package::save(&frozen, data, &saved, &package::Training { name, steps, soft, pad_to, pairs: examples.len() })?;
+    package::save(&frozen, data, &saved, &package::Training { name, steps, soft, pad_to, pairs: examples.len(), train_file })?;
     println!("Model saved in {}.", saved.display());
     Ok(())
 }

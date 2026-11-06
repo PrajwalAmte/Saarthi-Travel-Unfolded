@@ -38,7 +38,7 @@ fn read_training(dir: &Path) -> Result<Vec<TrainPair>, Box<dyn Error>> {
 }
 
 /// Each class counts equally, since nine in ten training pairs are "same".
-fn balanced_weights(labels: &[bool]) -> Vec<f64> {
+pub(crate) fn balanced_weights(labels: &[bool]) -> Vec<f64> {
     let positive = labels.iter().filter(|l| **l).count().max(1) as f64;
     let negative = labels.iter().filter(|l| !**l).count().max(1) as f64;
     let total = labels.len() as f64;
@@ -53,10 +53,10 @@ fn train(pairs: &[&TrainPair]) -> Model {
 
 /// A person's answer on one pair and how much of its rule's population it stands for.
 #[derive(Debug, Clone)]
-struct Case {
-    rule: String,
-    truth: bool,
-    weight: f64,
+pub(crate) struct Case {
+    pub(crate) rule: String,
+    pub(crate) truth: bool,
+    pub(crate) weight: f64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -66,7 +66,7 @@ pub struct Metrics {
     pub f1: f64,
 }
 
-fn metrics(indexes: impl Iterator<Item = usize>, cases: &[Case], predictions: &[bool]) -> Metrics {
+pub(crate) fn metrics(indexes: impl Iterator<Item = usize>, cases: &[Case], predictions: &[bool]) -> Metrics {
     let (mut tp, mut fp, mut fn_) = (0.0, 0.0, 0.0);
     for i in indexes {
         match (predictions[i], cases[i].truth) {
@@ -84,7 +84,7 @@ fn metrics(indexes: impl Iterator<Item = usize>, cases: &[Case], predictions: &[
 
 /// Each rule was sampled at its own rate, so each answer is weighted to stand for its share of the
 /// rule's pairs. Without this, small rules would count far beyond their real size.
-fn cases(pairs: &[&GoldPair]) -> Vec<Case> {
+pub(crate) fn cases(pairs: &[&GoldPair]) -> Vec<Case> {
     let mut answered: HashMap<&str, usize> = HashMap::new();
     for pair in pairs {
         *answered.entry(&pair.rule).or_insert(0) += 1;
@@ -96,7 +96,7 @@ fn cases(pairs: &[&GoldPair]) -> Vec<Case> {
 }
 
 /// The score cut-off with the best F1 on the calibration pairs.
-fn best_threshold(scores: &[f64], cases: &[Case]) -> f64 {
+pub(crate) fn best_threshold(scores: &[f64], cases: &[Case]) -> f64 {
     let mut candidates = scores.to_vec();
     candidates.sort_by(f64::total_cmp);
     candidates.dedup();
@@ -123,11 +123,11 @@ impl Random {
     }
 }
 
-type Range = (f64, f64);
+pub(crate) type Range = (f64, f64);
 
 /// 95% ranges by resampling answers within each rule, for each system and for a system's gain over
 /// the first one. The same resamples score every system, so the gain is a fair paired comparison.
-fn bootstrap(cases: &[Case], systems: &[&[bool]]) -> (Vec<Range>, Vec<Range>) {
+pub(crate) fn bootstrap(cases: &[Case], systems: &[&[bool]]) -> (Vec<Range>, Vec<Range>) {
     let mut by_rule: BTreeMap<&str, Vec<usize>> = BTreeMap::new();
     for (i, case) in cases.iter().enumerate() {
         by_rule.entry(&case.rule).or_default().push(i);
@@ -156,7 +156,7 @@ fn bootstrap(cases: &[Case], systems: &[&[bool]]) -> (Vec<Range>, Vec<Range>) {
     (f1s.into_iter().map(range).collect(), gains.into_iter().map(range).collect())
 }
 
-fn enough(pairs: &[&GoldPair]) -> bool {
+pub(crate) fn enough(pairs: &[&GoldPair]) -> bool {
     let same = pairs.iter().filter(|p| p.truth() == Some(true)).count();
     let different = pairs.iter().filter(|p| p.truth() == Some(false)).count();
     same >= MIN_PER_CLASS && different >= MIN_PER_CLASS
@@ -182,7 +182,7 @@ fn check_against_rules(pairs: &[TrainPair]) {
 }
 
 /// Scores another model produced for the checked pairs, by pair id.
-fn read_scores(path: &Path) -> Result<HashMap<String, f64>, Box<dyn Error>> {
+pub(crate) fn read_scores(path: &Path) -> Result<HashMap<String, f64>, Box<dyn Error>> {
     read_rows(path)?
         .iter()
         .map(|row| {

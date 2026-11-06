@@ -118,6 +118,55 @@ The input needs `name_a`, `category_a`, `name_b`, `category_b` and `distance_m`,
 The trainer reports each step to [Calibrate](https://github.com/PrajwalAmte/Calibrate): attach with
 `calibrate watch --pid <pid>`.
 
+## Retrain with the current rules
+
+The first training set copied the decisions the database held, which came from older rules, and held no
+pair that no rule ever compared. This rebuilds it from the rules as they are now. None of the steps changes
+the checked sheet.
+
+```bash
+cargo run --release -- pairs                 # read-only: every decided pair, and a larger never-compared sample
+./redecide/run.sh                            # decide each pair with the matching rules in this checkout
+cargo run --release -- build                 # writes train_pairs_v2.csv and gold_evidence.csv
+```
+
+`pairs` writes `data/pairs_full.csv`, which holds phone numbers and websites, so it stays in `data/`.
+`redecide/run.sh` compiles the real `MatchEvidence` and runs it over those pairs, so the decisions cannot drift
+from the importer's. Pass a git ref, such as `./redecide/run.sh 0707c48`, to decide with the rules as they were
+then. Against the database's own recorded decisions, the rules before the fixes agree on 98.6% of reviewed pairs,
+which shows the program is faithful.
+
+`build` re-decides reviewed pairs with the current rules, keeps the database's answer for pairs settled on import
+(`name_distance`, `wikidata`), and adds never-compared pairs as the rules would decide them. Each rule's pairs
+are weighted by how often the rule agreed with the person on the **calibration** pairs, pulled towards 0.85 when
+few were checked. Nothing a person will check, or that shares a record, place or name with one, is trained on.
+
+```bash
+cd train && cargo run --release -- train --name v2 --train train_pairs_v2.csv
+cd .. && cargo run --release -- stack --scores data/neural_scores_v2.csv
+```
+
+`stack` compares the rules before and after the fixes, boosting with and without contact evidence, and the neural
+model, then combines them with a short logistic fit on the calibration answers. It sets two cut-offs from
+predictions made on pairs the fit had not seen: an automatic one that must reach 95% precision, and a lower one for
+review.
+
+## A clean test
+
+The first 500 checked pairs were used to design rule fixes, so results on them flatter anything built on the rules.
+A second sheet of 320 pairs is a test nobody has tuned against:
+
+```bash
+cargo run --release -- fresh                 # read-only; writes data/fresh/gold_sheet.csv and gold_key.csv
+cargo run --release -- build --hold-out data/fresh --out train_pairs_v3.csv
+cd train && cargo run --release -- train --name v3 --train train_pairs_v3.csv
+```
+
+Its pairs share no record, mapped place or name with the first sheet, are all test pairs, and have ids `F001`
+onwards. `build --hold-out` keeps them, and anything sharing a record, place or name with them, out of training, so
+retrain after exporting; a model trained before then has seen some of them. Label the sheet as before, without AI
+help, and do not change rules or models using these answers.
+
 ## Publish a model
 
 [MODEL_CARD.md](MODEL_CARD.md) becomes the Hugging Face page. This builds the release files in

@@ -17,6 +17,8 @@ pub struct Example {
     pub id: String,
     pub rule: String,
     pub says_same: bool,
+    /// How much this pair's loss counts: how far its rule agreed with the person on the calibration pairs.
+    pub weight: f32,
     pub tokens: Vec<u32>,
     pub segments: Vec<u32>,
     pub extra: [f32; EXTRA_INPUTS],
@@ -61,6 +63,7 @@ pub fn load_examples(path: &Path, id_column: Option<&str>, tokenizer: &Tokenizer
                 id: id_column.and_then(|column| row.get(column)).cloned().unwrap_or_default(),
                 rule: row.get("rule").cloned().unwrap_or_default(),
                 says_same: row.get("rule_label").is_some_and(|label| label == "same"),
+                weight: row.get("weight").and_then(|w| w.parse().ok()).unwrap_or(1.0),
                 tokens: encoded.get_ids().to_vec(),
                 segments: encoded.get_type_ids().to_vec(),
                 extra: extra_inputs(distance, category_a, category_b),
@@ -170,7 +173,7 @@ mod tests {
 
     #[test]
     fn pad_to_sets_a_floor_on_batch_length() {
-        let example = Example { id: String::new(), rule: String::new(), says_same: true, tokens: vec![1; 10], segments: vec![0; 10], extra: [0.0; 2] };
+        let example = Example { id: String::new(), rule: String::new(), says_same: true, weight: 1.0, tokens: vec![1; 10], segments: vec![0; 10], extra: [0.0; 2] };
         assert_eq!(batch_length(&[&example], 0), 10);
         assert_eq!(batch_length(&[&example], 48), 48);
     }

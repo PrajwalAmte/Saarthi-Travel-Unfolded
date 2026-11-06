@@ -21,6 +21,8 @@ pub struct Training<'a> {
     pub soft: bool,
     pub pad_to: usize,
     pub pairs: usize,
+    /// The file in the data folder the pairs came from.
+    pub train_file: &'a str,
 }
 
 fn manifest(training: &Training) -> Value {
@@ -35,7 +37,8 @@ fn manifest(training: &Training) -> Value {
             "steps": training.steps,
             "soft_targets": training.soft,
             "pad_to": training.pad_to,
-            "labels": "Decisions by Saarthi's matching rules; judged against labels by the author, about 30% AI-drafted then reviewed",
+            "train_file": training.train_file,
+            "labels": "Decisions by Saarthi's matching rules, not human labels. Newer training files re-decide pairs with the current rules, add pairs no rule had compared and weight each rule by how far it agreed with the author's calibration answers. Those answers were the author's, about 30% AI-drafted then reviewed.",
         },
         // Set by `package`, from the cut-off chosen on the calibration pairs.
         "threshold": null,
@@ -129,17 +132,18 @@ mod tests {
 
     #[test]
     fn the_manifest_starts_without_a_threshold_and_records_how_it_was_trained() {
-        let m = manifest(&Training { name: "hard", steps: 400, soft: false, pad_to: 0, pairs: 19_332 });
+        let m = manifest(&Training { name: "hard", steps: 400, soft: false, pad_to: 0, pairs: 19_332, train_file: "train_pairs.csv" });
         assert!(m["threshold"].is_null());
         assert_eq!(m["training"]["pairs"], 19_332);
         assert_eq!(m["base_model"], "sentence-transformers/all-MiniLM-L6-v2");
+        assert_eq!(m["training"]["train_file"], "train_pairs.csv");
     }
 
     #[test]
     fn set_threshold_changes_only_the_threshold_and_refuses_nonsense() {
         let dir = std::env::temp_dir().join(format!("saarthi-package-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let m = manifest(&Training { name: "hard", steps: 400, soft: false, pad_to: 0, pairs: 10 });
+        let m = manifest(&Training { name: "hard", steps: 400, soft: false, pad_to: 0, pairs: 10, train_file: "train_pairs.csv" });
         std::fs::write(dir.join(MANIFEST), serde_json::to_string(&m).unwrap()).unwrap();
         set_threshold(&dir, 0.154).unwrap();
         let read = read_manifest(&dir).unwrap();
@@ -150,7 +154,7 @@ mod tests {
 
     #[test]
     fn batches_keep_every_pair_once_with_similar_lengths_together() {
-        let example = |n| Example { id: String::new(), rule: String::new(), says_same: false, tokens: vec![1; n], segments: vec![0; n], extra: [0.0; 2] };
+        let example = |n| Example { id: String::new(), rule: String::new(), says_same: false, weight: 1.0, tokens: vec![1; n], segments: vec![0; n], extra: [0.0; 2] };
         let examples: Vec<Example> = (1..=200).map(|i| example(i % 40 + 1)).collect();
         let batches = batches_by_length(&examples);
         let mut seen: Vec<usize> = batches.iter().flatten().copied().collect();

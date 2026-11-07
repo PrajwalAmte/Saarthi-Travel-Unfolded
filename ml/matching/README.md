@@ -162,6 +162,13 @@ cargo run --release -- build                 # keeps data/fresh out of training 
 cd train && cargo run --release -- train --name v2 --train train_pairs_v2.csv
 ```
 
+Once it is labelled, score it once. Everything is fitted on the first sheet's calibration pairs and applied unchanged:
+
+```bash
+cd train && cargo run --release -- predict --model ../data/models/v2 --input ../data/fresh/gold_key.csv --output ../data/fresh/neural_scores_v2.csv --device cpu
+cd .. && cargo run --release -- stack --scores data/neural_scores_v2.csv --fresh data/fresh
+```
+
 Its pairs share no record, mapped place or name with the first sheet, are all test pairs, and have ids `F001`
 onwards. Retrain after exporting it, because a model trained earlier has seen some of its pairs. Label the sheet as
 before, without AI help, and do not change rules or models using these answers.

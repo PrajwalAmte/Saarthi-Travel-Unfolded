@@ -7,7 +7,7 @@ use crate::baseline::{balanced_weights, best_threshold, bootstrap, cases, enough
 use crate::build::FLAGS;
 use crate::features::features;
 use crate::gbdt::{fit, Model, Params};
-use crate::labels::{field, read_rows, GoldPair};
+use crate::labels::{field, read_gold, read_rows, GoldPair};
 use crate::sampling::stable_hash;
 use std::collections::HashMap;
 use std::error::Error;
@@ -210,7 +210,9 @@ fn band_row(name: &str, cut: Option<f64>, members: &[(&Scored, f64)]) {
     println!("{name:<14}{cut:>9}{:>8}{same:>8}{different:>11}{share:>12}", members.len());
 }
 
-pub fn run(dir: &Path, gold: &[GoldPair], neural: Option<&Path>) -> Result<(), Box<dyn Error>> {
+/// With `fresh`, everything is fitted on the first sheet's calibration pairs and applied unchanged to the second
+/// sheet, whose pairs are then the test. Their scores come from the same-named file in that folder.
+pub fn run(dir: &Path, gold: &[GoldPair], neural: Option<&Path>, fresh: Option<&Path>) -> Result<(), Box<dyn Error>> {
     let neural_path = neural.ok_or("pass the neural model's scores with --scores")?;
     let training = read_training(dir)?;
     let evidence = read_evidence(dir)?;
@@ -222,13 +224,25 @@ pub fn run(dir: &Path, gold: &[GoldPair], neural: Option<&Path>) -> Result<(), B
     let boosted_model = boost(&all, true);
 
     let answered = |split: &str| -> Vec<&GoldPair> { gold.iter().filter(|p| p.split == split && p.truth().is_some()).collect() };
-    let (calibration, test) = (answered("calibration"), answered("test"));
+    let fresh_gold;
+    let fresh_evidence;
+    let fresh_scores;
+    let (calibration, test, test_evidence, test_neural) = if let Some(folder) = fresh {
+        fresh_gold = read_gold(folder)?;
+        fresh_evidence = read_evidence(folder)?;
+        fresh_scores = read_scores(&folder.join(neural_path.file_name().ok_or("--scores needs a file name")?))?;
+        let answered_fresh: Vec<&GoldPair> = fresh_gold.iter().filter(|p| p.truth().is_some()).collect();
+        println!("Second sheet: {} pairs answered, {} left unsure.", answered_fresh.len(), fresh_gold.len() - answered_fresh.len() - fresh_gold.iter().filter(|p| p.label.is_none()).count());
+        (answered("calibration"), answered_fresh, &fresh_evidence, &fresh_scores)
+    } else {
+        (answered("calibration"), answered("test"), &evidence, &neural_scores)
+    };
     if !enough(&calibration) || !enough(&test) {
         return Err("not enough answered pairs to compare systems".into());
     }
     let (calibration_scored, test_scored) = (
         score_pairs(&calibration, &evidence, &neural_scores, &names_model, &boosted_model)?,
-        score_pairs(&test, &evidence, &neural_scores, &names_model, &boosted_model)?,
+        score_pairs(&test, test_evidence, test_neural, &names_model, &boosted_model)?,
     );
     let (calibration_cases, test_cases) = (cases(&calibration), cases(&test));
 

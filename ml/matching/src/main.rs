@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         Some("fresh") => fresh::run(&args, &data),
         Some("score") => score::run(&data, &labels::read_gold(&data)?),
         Some("baseline") => baseline::run(&data, &labels::read_gold(&data)?, option(&args, "--scores").as_deref()),
-        Some("stack") => stack::run(&data, &labels::read_gold(&data)?, option(&args, "--scores").as_deref()),
+        Some("stack") => stack::run(&data, &labels::read_gold(&data)?, option(&args, "--scores").as_deref(), option(&args, "--fresh").as_deref()),
         Some("recheck") => recheck::build(&data, &labels::read_gold(&data)?, args.iter().any(|arg| arg == "--overwrite")),
         Some("recheck-score") => {
             let judged = recheck::compare(&data, &labels::read_gold(&data)?)?;
